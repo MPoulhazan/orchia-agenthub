@@ -13,6 +13,9 @@ export interface SessionInfo {
   status: 'running' | 'exited';
   exitCode: number | null;
   createdAt: number;
+  activity: 'starting' | 'working' | 'waiting' | 'idle';
+  detail: string | null;
+  unseen: boolean;
 }
 
 export interface Suggestion {
@@ -46,6 +49,7 @@ export const api = {
 
   createSession: (projectId: string) => request<SessionInfo>('/api/sessions', 'POST', { projectId }),
   renameSession: (id: string, name: string) => request(`/api/sessions/${id}`, 'PATCH', { name }),
+  markSeen: (id: string) => request(`/api/sessions/${id}/seen`, 'POST'),
   restartSession: (id: string) => request(`/api/sessions/${id}/restart`, 'POST'),
   closeSession: (id: string) => request(`/api/sessions/${id}`, 'DELETE'),
 

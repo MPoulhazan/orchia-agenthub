@@ -1,10 +1,12 @@
 import http from 'node:http';
+import { timingSafeEqual } from 'node:crypto';
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { Session } from './session.ts';
-import { ProjectStore } from './projects.ts';
+import { CONFIG_DIR, ProjectStore } from './projects.ts';
+import { activityFromHook, writeHookSettings } from './hooks.ts';
 import { claudeProjectSuggestions, homeFolder, listFolder } from './folders.ts';
 
 const HOST = '127.0.0.1';
@@ -13,6 +15,7 @@ const DEV_WEB_PORT = 5173;
 const STATIC_DIR = fileURLToPath(new URL('../dist', import.meta.url));
 
 const projects = new ProjectStore();
+const hookSettings = writeHookSettings(CONFIG_DIR, PORT);
 const sessions = new Map<string, Session>();
 
 // ---- Live state -------------------------------------------------------------
@@ -40,7 +43,7 @@ function createSession(projectId: string, cols?: number, rows?: number): Session
   const taken = new Set([...sessions.values()].filter((s) => s.projectId === projectId).map((s) => s.name));
   let n = 1;
   while (taken.has(`Session ${n}`)) n++;
-  const session = new Session(project.id, project.path, `Session ${n}`, cols, rows);
+  const session = new Session(project.id, project.path, `Session ${n}`, hookSettings, cols, rows);
   session.on('change', broadcast);
   sessions.set(session.id, session);
   broadcast();
@@ -79,6 +82,12 @@ function isTrusted(req: http.IncomingMessage): boolean {
   } catch {
     return false;
   }
+}
+
+function sameSecret(a: string, b: string): boolean {
+  const x = Buffer.from(a);
+  const y = Buffer.from(b);
+  return x.length === y.length && timingSafeEqual(x, y);
 }
 
 function sendJson(res: http.ServerResponse, status: number, body: unknown) {
@@ -132,6 +141,10 @@ const routes: [string, RegExp, Handler][] = [
     findSession(id).rename(name);
     return { ok: true };
   }],
+  ['POST', /^\/api\/sessions\/([\w-]+)\/seen$/, (_req, _url, [id]) => {
+    findSession(id).markSeen();
+    return { ok: true };
+  }],
   ['POST', /^\/api\/sessions\/([\w-]+)\/restart$/, (_req, _url, [id]) => {
     findSession(id).restart();
     return { ok: true };
@@ -153,7 +166,18 @@ const routes: [string, RegExp, Handler][] = [
   }],
 ];
 
+/** Called by Claude Code's HTTP hooks. Always answers 204 so it never alters Claude's decisions. */
+async function handleHook(req: http.IncomingMessage, res: http.ServerResponse) {
+  const session = sessions.get(String(req.headers['x-agenthub-session'] ?? ''));
+  const token = String(req.headers.authorization ?? '').replace(/^Bearer /, '');
+  if (!session || !sameSecret(token, session.token)) return sendJson(res, 403, { error: 'Forbidden' });
+  const update = activityFromHook(await readJson(req));
+  if (update) session.applyActivity(update);
+  res.writeHead(204).end();
+}
+
 async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, url: URL) {
+  if (url.pathname === '/api/hook' && req.method === 'POST') return handleHook(req, res);
   for (const [method, pattern, handler] of routes) {
     const match = url.pathname.match(pattern);
     if (match && req.method === method) return sendJson(res, 200, await handler(req, url, match.slice(1)));

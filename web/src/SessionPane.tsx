@@ -3,6 +3,7 @@ import { LayoutGrid, Maximize2, RotateCcw, X } from 'lucide-react';
 import { api, type Project, type SessionInfo } from './api';
 import { TerminalView } from './TerminalView';
 import { ConfirmButton } from './ui';
+import { StatusDot, statusLabel, statusOf } from './status';
 
 interface Props {
   session: SessionInfo;
@@ -24,7 +25,7 @@ export function SessionPane({ session, project, theme, compact, active, focusKey
   return (
     <section className="pane" data-compact={compact} data-active={active} onFocusCapture={onActivate} onMouseDown={onActivate}>
       <header className="pane-bar" onDoubleClick={compact ? onMaximize : undefined}>
-        {compact && <span className={`status-dot ${session.status}`} />}
+        {compact && <StatusDot session={session} />}
         <div className="crumbs">
           <span className="crumb-project">{project?.name}</span>
           <span className="crumb-sep">/</span>
@@ -35,7 +36,7 @@ export function SessionPane({ session, project, theme, compact, active, focusKey
             {session.cwd}
           </span>
         )}
-        {compact && exited && <span className="pane-meta">Ended</span>}
+        <StatusText session={session} compact={compact} />
         <span className="pane-spacer" />
 
         <button className="icon-btn" title="Restart session" onClick={() => api.restartSession(session.id)}>
@@ -99,5 +100,16 @@ export function SessionPane({ session, project, theme, compact, active, focusKey
         </div>
       )}
     </section>
+  );
+}
+
+function StatusText({ session, compact }: { session: SessionInfo; compact?: boolean }) {
+  const status = statusOf(session);
+  if (status === 'idle' || status === 'starting') return null;
+  const text = !compact && session.detail && status === 'waiting' ? `${statusLabel[status]} · ${session.detail}` : statusLabel[status];
+  return (
+    <span className="pane-status" data-status={status} title={session.detail ?? undefined}>
+      {text}
+    </span>
   );
 }

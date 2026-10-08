@@ -6,6 +6,8 @@ import { storage } from './storage';
 import { Rail, Sidebar, type View } from './Sidebar';
 import { CommandPalette, type PaletteMode } from './CommandPalette';
 import { SessionPane } from './SessionPane';
+import { needsAttention } from './status';
+import { pageActive, useNotifications } from './notifications';
 
 const SELECTED_KEY = 'agenthub.selectedSession';
 const SIDEBAR_KEY = 'agenthub.sidebar';
@@ -77,6 +79,30 @@ export function App() {
     const sibling = sessions.filter((s) => s.projectId === lastProjectId.current).at(-1);
     select(sibling?.id ?? null);
   }, [state, selected, selectedId]);
+
+  const notify = useNotifications(sessions, projects, (id) => open(id));
+
+  // Sessions on screen while the tab is in front count as seen.
+  const visibleIds = view === 'grid' ? gridSessions.map((s) => s.id) : selected ? [selected.id] : [];
+  const [pageTick, setPageTick] = useState(0);
+  useEffect(() => {
+    const bump = () => setPageTick((t) => t + 1);
+    window.addEventListener('focus', bump);
+    document.addEventListener('visibilitychange', bump);
+    return () => {
+      window.removeEventListener('focus', bump);
+      document.removeEventListener('visibilitychange', bump);
+    };
+  }, []);
+  useEffect(() => {
+    if (!pageActive()) return;
+    for (const s of sessions) if (s.unseen && visibleIds.includes(s.id)) api.markSeen(s.id).catch(() => {});
+  }, [state, visibleIds.join(), pageTick]);
+
+  const attentionCount = sessions.filter(needsAttention).length;
+  useEffect(() => {
+    document.title = attentionCount ? `(${attentionCount}) AgentHub` : 'AgentHub';
+  }, [attentionCount]);
 
   function setView(next: View) {
     // First time in an empty grid: show what is running instead of a blank screen.
@@ -190,6 +216,8 @@ export function App() {
           onOpenPalette={() => setPalette('root')}
           onAddProject={() => setPalette('root')}
           onSetTheme={theme.setPref}
+          notify={notify.state}
+          onToggleNotify={notify.toggle}
         />
       ) : (
         <Rail

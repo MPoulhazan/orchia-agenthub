@@ -14,7 +14,7 @@ interface Config {
   projects: Project[];
 }
 
-const CONFIG_DIR = process.env.AGENTHUB_HOME ?? join(homedir(), '.agenthub');
+export const CONFIG_DIR = process.env.AGENTHUB_HOME ?? join(homedir(), '.agenthub');
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
 
 /** Absolute path with an upper-case drive letter, so the same folder always looks the same. */

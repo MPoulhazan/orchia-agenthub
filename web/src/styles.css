@@ -14,6 +14,8 @@
   --text-muted: #8a8f98;
   --text-faint: #5c616b;
   --accent: #7cc38b;
+  --waiting: #e8b04f;
+  --done: #76a5e8;
   --danger: #e5726f;
   --danger-bg: rgba(229, 114, 111, 0.12);
   --overlay: rgba(0, 0, 0, 0.5);
@@ -36,6 +38,8 @@
   --text-muted: #6b6f76;
   --text-faint: #9a9ea5;
   --accent: #2f8a46;
+  --waiting: #c27c0e;
+  --done: #2c62c0;
   --danger: #c4403c;
   --danger-bg: rgba(196, 64, 60, 0.09);
   --overlay: rgba(20, 20, 20, 0.18);
@@ -170,13 +174,56 @@ kbd {
   background: var(--text-faint);
 }
 
-.status-dot.running {
+.status-dot[data-status='working'] {
   background: var(--accent);
+  animation: pulse 1.6s ease-in-out infinite;
 }
 
-.status-dot.exited {
+.status-dot[data-status='waiting'] {
+  background: var(--waiting);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--waiting) 22%, transparent);
+}
+
+.status-dot[data-status='done'] {
+  background: var(--done);
+}
+
+.status-dot[data-status='exited'] {
   background: transparent;
   box-shadow: inset 0 0 0 1.5px var(--text-faint);
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-dot[data-status='working'] {
+    animation: none;
+  }
+}
+
+.pane-status {
+  min-width: 0;
+  margin-left: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.pane-status[data-status='working'] {
+  color: var(--accent);
+}
+
+.pane-status[data-status='waiting'] {
+  color: var(--waiting);
+}
+
+.pane-status[data-status='done'] {
+  color: var(--done);
 }
 
 /* ---- Layout ---------------------------------------------------------------- */
@@ -249,6 +296,64 @@ kbd {
   color: var(--text-faint);
   font-size: 11.5px;
   font-weight: 500;
+}
+
+.section-count {
+  padding-right: 8px;
+  color: var(--text-faint);
+}
+
+.attention {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 0 8px 8px;
+}
+
+.attention-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.attention-row .status-dot {
+  margin-top: 6px;
+}
+
+.attention-row:hover {
+  background: var(--hover);
+}
+
+.attention-row[data-selected='true'] {
+  background: var(--selected);
+}
+
+.attention-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.attention-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.attention-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
 .tree {

@@ -28,6 +28,24 @@ Double-click a session in the sidebar to rename it. In grid view, clicking a
 session in the sidebar adds it to the grid (up to 6); double-click a cell header
 to focus it. `Alt 1…9` uses the physical number keys, so it works on AZERTY too.
 
+## Session status
+
+Sessions started from AgentHub report what they are doing through Claude Code
+HTTP hooks, injected with `--settings ~/.agenthub/claude-hooks.json`. They are
+added next to your own hooks, never replacing them, and only for these sessions.
+
+| Dot          | Meaning                                              |
+| ------------ | ---------------------------------------------------- |
+| green, pulse | Working                                              |
+| amber        | Needs you: permission, question or plan to review    |
+| blue         | Done, not looked at yet                              |
+| gray         | Idle                                                 |
+| hollow       | Process ended                                        |
+
+Amber and blue sessions are listed under **Needs you** and counted in the tab
+title. The bell in the sidebar turns on desktop notifications, sent only while
+the tab is in the background.
+
 ## Environment
 
 | Variable          | Default        | Purpose                         |

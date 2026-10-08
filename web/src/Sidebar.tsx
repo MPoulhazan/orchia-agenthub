@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { ChevronRight, LayoutGrid, Monitor, Moon, MoreHorizontal, PanelLeft, Plus, Search, Square, Sun, X } from 'lucide-react';
+import { Bell, BellOff, ChevronRight, LayoutGrid, Monitor, Moon, MoreHorizontal, PanelLeft, Plus, Search, Square, Sun, X } from 'lucide-react';
 import type { Project, SessionInfo } from './api';
 import type { ThemePref } from './theme';
 import { ConfirmButton, Menu } from './ui';
 import { storage } from './storage';
+import { StatusDot, needsAttention, statusOf } from './status';
+import type { NotifyState } from './notifications';
 
 export type View = 'focus' | 'grid';
 
@@ -25,6 +27,8 @@ interface Props {
   onOpenPalette: () => void;
   onAddProject: () => void;
   onSetTheme: (pref: ThemePref) => void;
+  notify: NotifyState;
+  onToggleNotify: () => void;
 }
 
 const COLLAPSED_KEY = 'agenthub.collapsedProjects';
@@ -58,6 +62,8 @@ export function Sidebar(props: Props) {
         <span>Search</span>
         <kbd>Ctrl K</kbd>
       </button>
+
+      <Attention projects={projects} sessions={sessions} selectedId={selectedId} onSelect={props.onSelect} />
 
       <div className="sidebar-section">
         <span>Projects</span>
@@ -134,6 +140,21 @@ export function Sidebar(props: Props) {
 
       <div className="sidebar-foot">
         {props.connected ? <span /> : <span className="offline">Server offline · reconnecting</span>}
+        <span className="pane-spacer" />
+        <button
+          className="icon-btn"
+          data-on={props.notify === 'on'}
+          title={
+            props.notify === 'blocked'
+              ? 'Notifications are blocked in the browser settings'
+              : props.notify === 'on'
+                ? 'Desktop notifications on'
+                : 'Turn on desktop notifications'
+          }
+          onClick={props.onToggleNotify}
+        >
+          {props.notify === 'on' ? <Bell size={14} /> : <BellOff size={14} />}
+        </button>
         <div className="segmented" role="radiogroup" aria-label="Theme">
           {(
             [
@@ -155,6 +176,44 @@ export function Sidebar(props: Props) {
         </div>
       </div>
     </aside>
+  );
+}
+
+/** Sessions waiting on the user or finished unseen, above the project tree. */
+function Attention(props: {
+  projects: Project[];
+  sessions: SessionInfo[];
+  selectedId: string | null;
+  onSelect: (s: SessionInfo) => void;
+}) {
+  const waiting = props.sessions.filter((s) => statusOf(s) === 'waiting');
+  const done = props.sessions.filter((s) => statusOf(s) === 'done');
+  const list = [...waiting, ...done].filter(needsAttention);
+  if (!list.length) return null;
+  const projectName = (id: string) => props.projects.find((p) => p.id === id)?.name ?? '';
+
+  return (
+    <>
+      <div className="sidebar-section">
+        <span>Needs you</span>
+        <span className="section-count">{list.length}</span>
+      </div>
+      <div className="attention">
+        {list.map((s) => (
+          <button key={s.id} className="attention-row" data-selected={s.id === props.selectedId} onClick={() => props.onSelect(s)}>
+            <StatusDot session={s} />
+            <span className="attention-text">
+              <span className="attention-title">
+                {projectName(s.projectId)} <span className="crumb-sep">/</span> {s.name}
+              </span>
+              <span className="attention-detail">
+                {statusOf(s) === 'waiting' ? (s.detail ?? 'Needs your input') : (s.detail ?? 'Finished')}
+              </span>
+            </span>
+          </button>
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -201,7 +260,7 @@ export function Rail(props: {
             title={`${projectName(s.projectId)} / ${s.name}${i < 9 ? `  (Alt ${i + 1})` : ''}`}
             onClick={() => props.onSelect(s)}
           >
-            <span className={`status-dot ${s.status}`} />
+            <StatusDot session={s} />
           </button>
         ))}
       </div>
@@ -228,7 +287,7 @@ function SessionRow({
 
   return (
     <div className="tree-session" data-selected={selected} onClick={onSelect} onDoubleClick={() => setEditing(true)}>
-      <span className={`status-dot ${session.status}`} />
+      <StatusDot session={session} />
       {editing ? (
         <input
           className="rename-input"
