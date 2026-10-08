@@ -6,15 +6,18 @@ import {
   FolderOpen,
   FolderPlus,
   History,
+  LayoutGrid,
   Monitor,
   Moon,
   PanelLeft,
   Plus,
+  Square,
   Sun,
 } from 'lucide-react';
 import { api, type FolderListing, type Project, type Suggestion } from './api';
 import { fuzzyScore } from './fuzzy';
 import type { ThemePref } from './theme';
+import type { View } from './Sidebar';
 
 export type PaletteMode = 'root' | 'browse';
 
@@ -32,11 +35,13 @@ interface Props {
   initialMode: PaletteMode;
   projects: Project[];
   currentProject: Project | null;
+  view: View;
   onClose: () => void;
   onOpenProject: (project: Project) => void;
   onAddPath: (path: string) => Promise<void>;
   onNewSession: (project: Project) => void;
   onSetTheme: (pref: ThemePref) => void;
+  onSetView: (view: View) => void;
   onToggleSidebar: () => void;
 }
 
@@ -132,6 +137,9 @@ export function CommandPalette(props: Props) {
       ...(currentProject
         ? [{ id: 'new', group: 'Actions', label: `New session in ${currentProject.name}`, icon: <Plus size={ICON} />, run: () => props.onNewSession(currentProject) }]
         : []),
+      props.view === 'grid'
+        ? { id: 'view', group: 'Actions', label: 'Switch to focus view', icon: <Square size={ICON} />, run: () => props.onSetView('focus') }
+        : { id: 'view', group: 'Actions', label: 'Switch to grid view', icon: <LayoutGrid size={ICON} />, run: () => props.onSetView('grid') },
       { id: 'sidebar', group: 'Actions', label: 'Toggle sidebar', icon: <PanelLeft size={ICON} />, run: () => props.onToggleSidebar() },
       { id: 'theme-system', group: 'Actions', label: 'Theme: System', icon: <Monitor size={ICON} />, run: () => props.onSetTheme('system') },
       { id: 'theme-light', group: 'Actions', label: 'Theme: Light', icon: <Sun size={ICON} />, run: () => props.onSetTheme('light') },
@@ -142,7 +150,7 @@ export function CommandPalette(props: Props) {
       out.unshift({ id: 'add-path', group: 'Add', label: `Add ${q}`, icon: <FolderPlus size={ICON} />, run: () => add(q) });
     }
     return out;
-  }, [mode, query, listing, projects, suggestions, currentProject]);
+  }, [mode, query, listing, projects, suggestions, currentProject, props.view]);
 
   useEffect(() => setActive(0), [query]);
 

@@ -1,11 +1,17 @@
 import { useState } from 'react';
-import { ChevronRight, Monitor, Moon, MoreHorizontal, Plus, Search, Sun, X } from 'lucide-react';
+import { ChevronRight, LayoutGrid, Monitor, Moon, MoreHorizontal, PanelLeft, Plus, Search, Square, Sun, X } from 'lucide-react';
 import type { Project, SessionInfo } from './api';
 import type { ThemePref } from './theme';
 import { ConfirmButton, Menu } from './ui';
 import { storage } from './storage';
 
+export type View = 'focus' | 'grid';
+
 interface Props {
+  view: View;
+  gridIds: string[];
+  onSetView: (view: View) => void;
+  onCollapse: () => void;
   projects: Project[];
   sessions: SessionInfo[];
   selectedId: string | null;
@@ -40,6 +46,11 @@ export function Sidebar(props: Props) {
     <aside className="sidebar">
       <div className="sidebar-head">
         <span className="wordmark">AgentHub</span>
+        <span className="pane-spacer" />
+        <ViewSwitch view={props.view} onSetView={props.onSetView} />
+        <button className="icon-btn" title="Collapse sidebar" onClick={props.onCollapse}>
+          <PanelLeft size={15} />
+        </button>
       </div>
 
       <button className="search-btn" onClick={props.onOpenPalette}>
@@ -104,6 +115,7 @@ export function Sidebar(props: Props) {
                     key={session.id}
                     session={session}
                     selected={session.id === selectedId}
+                    inGrid={props.gridIds.includes(session.id)}
                     onSelect={() => props.onSelect(session)}
                     onClose={() => props.onCloseSession(session)}
                     onRename={(name) => props.onRenameSession(session, name)}
@@ -146,15 +158,68 @@ export function Sidebar(props: Props) {
   );
 }
 
+export function ViewSwitch({ view, onSetView, vertical }: { view: View; onSetView: (v: View) => void; vertical?: boolean }) {
+  return (
+    <div className="segmented" data-vertical={vertical} role="radiogroup" aria-label="Layout">
+      <button role="radio" aria-checked={view === 'focus'} title="Focus view (Alt G)" onClick={() => onSetView('focus')}>
+        <Square size={12} />
+      </button>
+      <button role="radio" aria-checked={view === 'grid'} title="Grid view (Alt G)" onClick={() => onSetView('grid')}>
+        <LayoutGrid size={13} />
+      </button>
+    </div>
+  );
+}
+
+/** Collapsed sidebar: layout controls and one dot per session. */
+export function Rail(props: {
+  view: View;
+  projects: Project[];
+  sessions: SessionInfo[];
+  selectedId: string | null;
+  onSetView: (v: View) => void;
+  onExpand: () => void;
+  onOpenPalette: () => void;
+  onSelect: (s: SessionInfo) => void;
+}) {
+  const projectName = (id: string) => props.projects.find((p) => p.id === id)?.name ?? '';
+  return (
+    <aside className="rail">
+      <button className="icon-btn" title="Expand sidebar" onClick={props.onExpand}>
+        <PanelLeft size={15} />
+      </button>
+      <button className="icon-btn" title="Search (Ctrl K)" onClick={props.onOpenPalette}>
+        <Search size={15} />
+      </button>
+      <ViewSwitch view={props.view} onSetView={props.onSetView} vertical />
+      <div className="rail-sessions">
+        {props.sessions.map((s, i) => (
+          <button
+            key={s.id}
+            className="rail-session"
+            data-selected={s.id === props.selectedId}
+            title={`${projectName(s.projectId)} / ${s.name}${i < 9 ? `  (Alt ${i + 1})` : ''}`}
+            onClick={() => props.onSelect(s)}
+          >
+            <span className={`status-dot ${s.status}`} />
+          </button>
+        ))}
+      </div>
+    </aside>
+  );
+}
+
 function SessionRow({
   session,
   selected,
+  inGrid,
   onSelect,
   onClose,
   onRename,
 }: {
   session: SessionInfo;
   selected: boolean;
+  inGrid: boolean;
   onSelect: () => void;
   onClose: () => void;
   onRename: (name: string) => void;
@@ -186,6 +251,11 @@ function SessionRow({
         />
       ) : (
         <span className="tree-label">{session.name}</span>
+      )}
+      {!editing && inGrid && (
+        <span className="tree-grid-mark" title="In grid">
+          <LayoutGrid size={11} />
+        </span>
       )}
       {!editing && session.status === 'running' && (
         <ConfirmButton className="icon-btn tree-close" title="End session" confirmLabel="End" onConfirm={onClose}>

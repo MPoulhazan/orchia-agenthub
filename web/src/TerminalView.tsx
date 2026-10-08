@@ -11,13 +11,21 @@ interface Props {
   theme: ITheme;
   /** Changing this value moves keyboard focus back into the terminal. */
   focusKey?: number;
+  fontSize?: number;
+  /** Take keyboard focus once the terminal is ready. */
+  autoFocus?: boolean;
 }
 
-export function TerminalView({ sessionId, theme, focusKey }: Props) {
+export function TerminalView({ sessionId, theme, focusKey, fontSize = 13, autoFocus = true }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
+  const refitRef = useRef<() => void>(() => {});
   const themeRef = useRef(theme);
   themeRef.current = theme;
+  const fontSizeRef = useRef(fontSize);
+  fontSizeRef.current = fontSize;
+  const autoFocusRef = useRef(autoFocus);
+  autoFocusRef.current = autoFocus;
 
   useEffect(() => {
     const host = hostRef.current!;
@@ -25,7 +33,7 @@ export function TerminalView({ sessionId, theme, focusKey }: Props) {
 
     const term = new Terminal({
       fontFamily: '"JetBrains Mono Variable", ui-monospace, monospace',
-      fontSize: 13,
+      fontSize: fontSizeRef.current,
       lineHeight: 1.2,
       cursorBlink: true,
       scrollback: 5000,
@@ -45,6 +53,8 @@ export function TerminalView({ sessionId, theme, focusKey }: Props) {
       fit.fit();
       send({ t: 'resize', cols: term.cols, rows: term.rows });
     };
+
+    refitRef.current = sendSize;
 
     term.attachCustomKeyEventHandler((e) => {
       // Shift+Enter inserts a newline in Claude's prompt: send a line feed (Ctrl+J).
@@ -97,7 +107,7 @@ export function TerminalView({ sessionId, theme, focusKey }: Props) {
       }
       sendSize();
       observer.observe(host);
-      term.focus();
+      if (autoFocusRef.current) term.focus();
     });
 
     return () => {
@@ -117,6 +127,13 @@ export function TerminalView({ sessionId, theme, focusKey }: Props) {
   useEffect(() => {
     if (focusKey) termRef.current?.focus();
   }, [focusKey]);
+
+  useEffect(() => {
+    const term = termRef.current;
+    if (!term || term.options.fontSize === fontSize) return;
+    term.options.fontSize = fontSize;
+    refitRef.current();
+  }, [fontSize]);
 
   // Padding lives on the wrapper: the fit addon measures the inner element's
   // parent and would count border-box padding as usable space.
