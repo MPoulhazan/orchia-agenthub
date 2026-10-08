@@ -99,6 +99,16 @@ export function App() {
     for (const s of sessions) if (s.unseen && visibleIds.includes(s.id)) api.markSeen(s.id).catch(() => {});
   }, [state, visibleIds.join(), pageTick]);
 
+  // Paused sessions (restored after a server restart) come back when they are shown.
+  const resumed = useRef(new Set<string>());
+  useEffect(() => {
+    for (const s of sessions) {
+      if (s.status !== 'suspended' || !visibleIds.includes(s.id) || resumed.current.has(s.id)) continue;
+      resumed.current.add(s.id);
+      api.resumeSession(s.id).catch(() => resumed.current.delete(s.id));
+    }
+  }, [state, visibleIds.join()]);
+
   const attentionCount = sessions.filter(needsAttention).length;
   useEffect(() => {
     document.title = attentionCount ? `(${attentionCount}) AgentHub` : 'AgentHub';

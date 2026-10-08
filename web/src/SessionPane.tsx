@@ -21,6 +21,7 @@ interface Props {
 
 export function SessionPane({ session, project, theme, compact, active, focusKey, inGrid, onActivate, onMaximize, onToggleGrid }: Props) {
   const exited = session.status === 'exited';
+  const paused = session.status === 'suspended';
 
   return (
     <section className="pane" data-compact={compact} data-active={active} onFocusCapture={onActivate} onMouseDown={onActivate}>
@@ -39,7 +40,7 @@ export function SessionPane({ session, project, theme, compact, active, focusKey
         <StatusText session={session} compact={compact} />
         <span className="pane-spacer" />
 
-        <button className="icon-btn" title="Restart session" onClick={() => api.restartSession(session.id)}>
+        <button className="icon-btn" title="Restart (keeps the conversation)" onClick={() => api.restartSession(session.id)}>
           <RotateCcw size={14} />
         </button>
         {compact ? (
@@ -87,15 +88,24 @@ export function SessionPane({ session, project, theme, compact, active, focusKey
         autoFocus={!compact || active}
       />
 
-      {exited && !compact && (
-        <div className="ended-bar">
-          <span>Session ended{session.exitCode !== null ? ` with code ${session.exitCode}` : ''}</span>
+      {(exited || paused) && (
+        <div className="ended-bar" data-compact={compact}>
+          <span>
+            {paused
+              ? 'Paused after a restart'
+              : `Session ended${session.exitCode !== null && !compact ? ` with code ${session.exitCode}` : ''}`}
+          </span>
           <span className="pane-spacer" />
-          <button className="btn btn-ghost" onClick={() => api.closeSession(session.id)}>
-            Close
+          {!compact && (
+            <button className="btn btn-ghost" onClick={() => api.closeSession(session.id)}>
+              Close
+            </button>
+          )}
+          <button className="btn btn-ghost" onClick={() => api.restartSession(session.id, true)}>
+            New conversation
           </button>
-          <button className="btn btn-secondary" onClick={() => api.restartSession(session.id)}>
-            Restart
+          <button className="btn btn-secondary" onClick={() => api.resumeSession(session.id)}>
+            Resume
           </button>
         </div>
       )}

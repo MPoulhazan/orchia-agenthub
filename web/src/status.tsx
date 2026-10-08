@@ -1,9 +1,10 @@
 import type { SessionInfo } from './api';
 
-export type Status = 'starting' | 'working' | 'waiting' | 'done' | 'idle' | 'exited';
+export type Status = 'starting' | 'working' | 'waiting' | 'done' | 'idle' | 'paused' | 'exited';
 
 export function statusOf(s: SessionInfo): Status {
   if (s.status === 'exited') return 'exited';
+  if (s.status === 'suspended') return 'paused';
   if (s.activity === 'waiting') return 'waiting';
   if (s.activity === 'working') return 'working';
   if (s.activity === 'idle') return s.unseen ? 'done' : 'idle';
@@ -16,6 +17,7 @@ export const statusLabel: Record<Status, string> = {
   waiting: 'Needs you',
   done: 'Done',
   idle: 'Idle',
+  paused: 'Paused',
   exited: 'Ended',
 };
 

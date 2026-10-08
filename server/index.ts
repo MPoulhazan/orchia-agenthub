@@ -7,6 +7,7 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import { Session } from './session.ts';
 import { CONFIG_DIR, ProjectStore } from './projects.ts';
 import { activityFromHook, writeHookSettings } from './hooks.ts';
+import { SessionStore, hasTranscript } from './sessionStore.ts';
 import { claudeProjectSuggestions, homeFolder, listFolder } from './folders.ts';
 
 const HOST = '127.0.0.1';
@@ -17,6 +18,7 @@ const STATIC_DIR = fileURLToPath(new URL('../dist', import.meta.url));
 const projects = new ProjectStore();
 const hookSettings = writeHookSettings(CONFIG_DIR, PORT);
 const sessions = new Map<string, Session>();
+const sessionStore = new SessionStore(CONFIG_DIR);
 
 // ---- Live state -------------------------------------------------------------
 // Every client keeps one events socket open and receives the whole state on
@@ -32,9 +34,16 @@ function state() {
   };
 }
 
+/** Push the new state to every client and persist the sessions. */
 function broadcast() {
   const msg = JSON.stringify(state());
   for (const ws of eventClients) if (ws.readyState === ws.OPEN) ws.send(msg);
+  sessionStore.save(() => [...sessions.values()].map((s) => s.record()));
+}
+
+function addSession(session: Session) {
+  session.on('change', broadcast);
+  sessions.set(session.id, session);
 }
 
 function createSession(projectId: string, cols?: number, rows?: number): Session {
@@ -43,11 +52,17 @@ function createSession(projectId: string, cols?: number, rows?: number): Session
   const taken = new Set([...sessions.values()].filter((s) => s.projectId === projectId).map((s) => s.name));
   let n = 1;
   while (taken.has(`Session ${n}`)) n++;
-  const session = new Session(project.id, project.path, `Session ${n}`, hookSettings, cols, rows);
-  session.on('change', broadcast);
-  sessions.set(session.id, session);
+  const session = new Session({ projectId: project.id, cwd: project.path, name: `Session ${n}`, hookSettings, cols, rows });
+  addSession(session);
   broadcast();
   return session;
+}
+
+// Sessions from the previous run come back suspended; the UI resumes them when shown.
+for (const record of sessionStore.load()) {
+  const project = projects.get(record.projectId);
+  if (!project) continue;
+  addSession(new Session({ projectId: project.id, cwd: project.path, name: record.name, hookSettings, restore: record }));
 }
 
 function closeSession(session: Session) {
@@ -145,8 +160,15 @@ const routes: [string, RegExp, Handler][] = [
     findSession(id).markSeen();
     return { ok: true };
   }],
-  ['POST', /^\/api\/sessions\/([\w-]+)\/restart$/, (_req, _url, [id]) => {
-    findSession(id).restart();
+  ['POST', /^\/api\/sessions\/([\w-]+)\/resume$/, (_req, _url, [id]) => {
+    const session = findSession(id);
+    session.resume(hasTranscript(session.claudeSessionId));
+    return { ok: true };
+  }],
+  ['POST', /^\/api\/sessions\/([\w-]+)\/restart$/, async (req, _url, [id]) => {
+    const session = findSession(id);
+    const body = await readJson(req);
+    session.restart({ fresh: body.fresh === true, hasTranscript: hasTranscript(session.claudeSessionId) });
     return { ok: true };
   }],
   ['DELETE', /^\/api\/sessions\/([\w-]+)$/, (_req, _url, [id]) => {
@@ -171,7 +193,9 @@ async function handleHook(req: http.IncomingMessage, res: http.ServerResponse) {
   const session = sessions.get(String(req.headers['x-agenthub-session'] ?? ''));
   const token = String(req.headers.authorization ?? '').replace(/^Bearer /, '');
   if (!session || !sameSecret(token, session.token)) return sendJson(res, 403, { error: 'Forbidden' });
-  const update = activityFromHook(await readJson(req));
+  const payload = await readJson(req);
+  session.trackClaudeSession(payload?.session_id);
+  const update = activityFromHook(payload);
   if (update) session.applyActivity(update);
   res.writeHead(204).end();
 }
@@ -274,6 +298,9 @@ function attachStream(ws: WebSocket, session: Session) {
 }
 
 function shutdown() {
+  // Save before killing: dying processes would otherwise be recorded as exited.
+  sessionStore.save(() => [...sessions.values()].map((s) => s.record()));
+  sessionStore.flush();
   for (const session of sessions.values()) session.dispose();
   process.exit(0);
 }

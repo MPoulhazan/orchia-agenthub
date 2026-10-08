@@ -188,9 +188,13 @@ kbd {
   background: var(--done);
 }
 
-.status-dot[data-status='exited'] {
+.status-dot[data-status='paused'] {
   background: transparent;
   box-shadow: inset 0 0 0 1.5px var(--text-faint);
+}
+
+.status-dot[data-status='exited'] {
+  background: var(--border-strong);
 }
 
 @keyframes pulse {
@@ -767,6 +771,19 @@ kbd {
   padding: 8px 8px 8px 14px;
   border-top: 1px solid var(--border);
   color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.ended-bar[data-compact='true'] {
+  gap: 4px;
+  padding: 4px 4px 4px 12px;
+  font-size: 12px;
+}
+
+.ended-bar[data-compact='true'] .btn {
+  height: 26px;
+  padding: 0 8px;
+  font-size: 12px;
 }
 
 /* ---- Empty state ----------------------------------------------------------- */

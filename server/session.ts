@@ -12,7 +12,8 @@ const { SerializeAddon } = require('@xterm/addon-serialize') as typeof import('@
 
 const SCROLLBACK = 5000;
 
-export type SessionStatus = 'running' | 'exited';
+/** `suspended`: restored after a server restart, resumes the conversation on demand. */
+export type SessionStatus = 'running' | 'exited' | 'suspended';
 
 export interface SessionInfo {
   id: string;
@@ -28,17 +29,44 @@ export interface SessionInfo {
   unseen: boolean;
 }
 
+/** What survives a server restart. */
+export interface SessionRecord {
+  id: string;
+  projectId: string;
+  name: string;
+  cwd: string;
+  createdAt: number;
+  claudeSessionId: string;
+  exited: boolean;
+}
+
+interface SessionOptions {
+  projectId: string;
+  cwd: string;
+  name: string;
+  hookSettings: string | null;
+  cols?: number;
+  rows?: number;
+  /** Bring back a session from a previous server run, without starting claude yet. */
+  restore?: SessionRecord;
+}
+
 /**
  * One claude process in a PTY. The PTY output is mirrored into a headless
  * terminal so a client connecting later (page reload, switching sessions)
  * receives the current screen instead of a raw replay of the byte stream.
  *
- * Events: 'data' (output chunk), 'reset' (process restarted), 'change' (info changed).
+ * Events: 'data' (output chunk), 'reset' (new process), 'change' (info changed).
  */
 export class Session extends EventEmitter {
-  readonly id = randomUUID();
-  readonly createdAt = Date.now();
-  status: SessionStatus = 'running';
+  readonly id: string;
+  readonly projectId: string;
+  readonly cwd: string;
+  readonly createdAt: number;
+  name: string;
+  /** Claude Code's own conversation id, used to resume it with `--resume`. */
+  claudeSessionId: string;
+  status: SessionStatus;
   exitCode: number | null = null;
   activity: Activity = 'starting';
   detail: string | null = null;
@@ -46,33 +74,50 @@ export class Session extends EventEmitter {
   /** Shared with the hooks so only this session's claude can report its activity. */
   readonly token = randomBytes(24).toString('hex');
 
-  private proc!: IPty;
+  private readonly hookSettings: string | null;
+  private cols: number;
+  private rows: number;
+  private proc: IPty | null = null;
   private mirror!: InstanceType<typeof HeadlessTerminal>;
   private serializer!: InstanceType<typeof SerializeAddon>;
 
-  constructor(
-    readonly projectId: string,
-    readonly cwd: string,
-    public name: string,
-    private readonly hookSettings: string | null,
-    private cols = 120,
-    private rows = 32,
-  ) {
+  constructor(opts: SessionOptions) {
     super();
-    this.start();
+    const restore = opts.restore;
+    this.id = restore?.id ?? randomUUID();
+    this.projectId = opts.projectId;
+    this.cwd = opts.cwd;
+    this.name = restore?.name ?? opts.name;
+    this.createdAt = restore?.createdAt ?? Date.now();
+    this.claudeSessionId = restore?.claudeSessionId ?? randomUUID();
+    this.hookSettings = opts.hookSettings;
+    this.cols = opts.cols ?? 120;
+    this.rows = opts.rows ?? 32;
+    this.resetMirror();
+
+    if (restore) {
+      this.status = restore.exited ? 'exited' : 'suspended';
+    } else {
+      this.status = 'running';
+      this.spawn(false);
+    }
   }
 
-  private start() {
+  private resetMirror() {
+    this.mirror?.dispose();
     this.mirror = new HeadlessTerminal({ cols: this.cols, rows: this.rows, scrollback: SCROLLBACK, allowProposedApi: true });
     this.serializer = new SerializeAddon();
     this.mirror.loadAddon(this.serializer);
+  }
+
+  private spawn(resume: boolean) {
     this.status = 'running';
     this.exitCode = null;
     this.activity = 'starting';
     this.detail = null;
     this.unseen = false;
 
-    const [file, args] = claudeCommand(this.hookSettings);
+    const [file, args] = claudeCommand(this.hookSettings, resume ? ['--resume', this.claudeSessionId] : ['--session-id', this.claudeSessionId]);
     const proc = pty.spawn(file, args, {
       name: 'xterm-256color',
       cols: this.cols,
@@ -97,6 +142,7 @@ export class Session extends EventEmitter {
     });
     proc.onExit(({ exitCode }) => {
       if (this.proc !== proc) return; // a restart already replaced this process
+      this.proc = null;
       this.status = 'exited';
       this.exitCode = exitCode;
       // Queue behind pending output so clients see the last lines before the change.
@@ -104,12 +150,36 @@ export class Session extends EventEmitter {
     });
   }
 
-  restart() {
+  /** Replace the process: `resume` continues the conversation, otherwise a new one starts. */
+  private relaunch(resume: boolean) {
     const old = this.proc;
-    this.mirror.dispose();
-    this.start();
-    if (old) old.kill();
+    this.proc = null;
+    old?.kill();
+    this.resetMirror();
+    this.spawn(resume);
     this.emit('reset');
+    this.emit('change');
+  }
+
+  /** Continue the same Claude conversation, e.g. after a server restart. */
+  resume(hasTranscript: boolean) {
+    if (this.status === 'running') return;
+    this.restart({ fresh: false, hasTranscript });
+  }
+
+  /**
+   * Kill and relaunch claude. By default the conversation carries on; `fresh`
+   * starts a new one. A session that never got a prompt has no transcript to resume.
+   */
+  restart({ fresh, hasTranscript }: { fresh: boolean; hasTranscript: boolean }) {
+    if (fresh) this.claudeSessionId = randomUUID();
+    this.relaunch(!fresh && hasTranscript);
+  }
+
+  /** Claude switches conversations on /clear; follow it so resuming picks the current one. */
+  trackClaudeSession(id: unknown) {
+    if (typeof id !== 'string' || !id || id === this.claudeSessionId) return;
+    this.claudeSessionId = id;
     this.emit('change');
   }
 
@@ -137,7 +207,7 @@ export class Session extends EventEmitter {
   }
 
   write(data: string) {
-    if (this.status !== 'running') return;
+    if (!this.proc) return;
     this.proc.write(data);
     // Answering a prompt in the terminal unblocks Claude before any hook says so.
     if (this.activity === 'waiting' && data.includes('\r')) this.applyActivity({ activity: 'working' });
@@ -150,12 +220,11 @@ export class Session extends EventEmitter {
   }
 
   resize(cols: number, rows: number) {
-    if (this.status !== 'running') return;
     if (cols < 2 || rows < 2 || (cols === this.cols && rows === this.rows)) return;
     this.cols = cols;
     this.rows = rows;
-    this.proc.resize(cols, rows);
     this.mirror.resize(cols, rows);
+    this.proc?.resize(cols, rows);
   }
 
   /** Current screen + scrollback as an escape sequence string. */
@@ -164,7 +233,9 @@ export class Session extends EventEmitter {
   }
 
   dispose() {
-    if (this.status === 'running') this.proc.kill();
+    const proc = this.proc;
+    this.proc = null;
+    proc?.kill();
     this.mirror.dispose();
     this.removeAllListeners();
   }
@@ -181,6 +252,18 @@ export class Session extends EventEmitter {
       activity: this.activity,
       detail: this.detail,
       unseen: this.unseen,
+    };
+  }
+
+  record(): SessionRecord {
+    return {
+      id: this.id,
+      projectId: this.projectId,
+      name: this.name,
+      cwd: this.cwd,
+      createdAt: this.createdAt,
+      claudeSessionId: this.claudeSessionId,
+      exited: this.status === 'exited',
     };
   }
 }
@@ -206,14 +289,15 @@ function cleanEnv(): Record<string, string> {
   return env;
 }
 
-function claudeCommand(hookSettings: string | null): [string, string[] | string] {
+function claudeCommand(hookSettings: string | null, extraArgs: string[]): [string, string[] | string] {
   const command = process.env.AGENTHUB_CLAUDE ?? 'claude';
+  const args = [...(hookSettings ? ['--settings', hookSettings] : []), ...extraArgs];
   if (process.platform === 'win32') {
     // `claude` is often an npm .cmd shim, which only cmd.exe can run. The command
     // line is passed pre-escaped: with /s, cmd strips the outer quotes and keeps
-    // the inner ones around the settings path.
-    const settings = hookSettings ? ` --settings "${hookSettings}"` : '';
-    return [process.env.ComSpec ?? 'cmd.exe', `/d /s /c "${command}${settings}"`];
+    // the inner ones. Our arguments are paths and UUIDs, which never contain quotes.
+    const line = args.map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(' ');
+    return [process.env.ComSpec ?? 'cmd.exe', `/d /s /c "${command} ${line}"`];
   }
-  return [command, hookSettings ? ['--settings', hookSettings] : []];
+  return [command, args];
 }

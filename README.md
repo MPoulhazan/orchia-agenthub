@@ -10,8 +10,13 @@ npm start        # builds the UI, serves everything on http://127.0.0.1:4317
 npm run dev      # development: UI with hot reload on http://localhost:5173
 ```
 
-Sessions live in the server process: reloading the page reattaches to them,
-stopping the server ends them. Projects are saved in `~/.agenthub/config.json`.
+Reloading the page reattaches to running sessions. Projects are saved in
+`~/.agenthub/config.json` and sessions in `~/.agenthub/sessions.json`.
+
+When the server stops (restart, closed terminal, reboot, crash), sessions come
+back **paused** and resume their Claude conversation (`claude --resume`) as soon
+as they are shown. A turn that was running at that moment is interrupted. The
+restart button keeps the conversation; "New conversation" starts a fresh one.
 
 ## Shortcuts
 
@@ -40,7 +45,8 @@ added next to your own hooks, never replacing them, and only for these sessions.
 | amber        | Needs you: permission, question or plan to review    |
 | blue         | Done, not looked at yet                              |
 | gray         | Idle                                                 |
-| hollow       | Process ended                                        |
+| hollow       | Paused after a server restart, resumes when shown    |
+| dim          | Process ended                                        |
 
 Amber and blue sessions are listed under **Needs you** and counted in the tab
 title. The bell in the sidebar turns on desktop notifications, sent only while

@@ -10,7 +10,7 @@ export interface SessionInfo {
   projectId: string;
   name: string;
   cwd: string;
-  status: 'running' | 'exited';
+  status: 'running' | 'exited' | 'suspended';
   exitCode: number | null;
   createdAt: number;
   activity: 'starting' | 'working' | 'waiting' | 'idle';
@@ -50,7 +50,9 @@ export const api = {
   createSession: (projectId: string) => request<SessionInfo>('/api/sessions', 'POST', { projectId }),
   renameSession: (id: string, name: string) => request(`/api/sessions/${id}`, 'PATCH', { name }),
   markSeen: (id: string) => request(`/api/sessions/${id}/seen`, 'POST'),
-  restartSession: (id: string) => request(`/api/sessions/${id}/restart`, 'POST'),
+  resumeSession: (id: string) => request(`/api/sessions/${id}/resume`, 'POST'),
+  /** Keeps the conversation unless `fresh`. */
+  restartSession: (id: string, fresh = false) => request(`/api/sessions/${id}/restart`, 'POST', { fresh }),
   closeSession: (id: string) => request(`/api/sessions/${id}`, 'DELETE'),
 
   suggestions: () => request<Suggestion[]>('/api/suggestions'),
