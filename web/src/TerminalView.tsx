@@ -6,39 +6,18 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@xterm/xterm/css/xterm.css';
 import { api } from './api';
 
-const theme: ITheme = {
-  background: '#0e0f11',
-  foreground: '#d9dbe0',
-  cursor: '#d9dbe0',
-  cursorAccent: '#0e0f11',
-  selectionBackground: '#3a3f4b',
-  black: '#1b1d21',
-  red: '#e5726f',
-  green: '#7cc38b',
-  yellow: '#e2b86b',
-  blue: '#76a5e8',
-  magenta: '#c49be3',
-  cyan: '#6cc3c9',
-  white: '#c9ccd3',
-  brightBlack: '#5c616b',
-  brightRed: '#f08b88',
-  brightGreen: '#97d6a4',
-  brightYellow: '#efcb86',
-  brightBlue: '#93b9ef',
-  brightMagenta: '#d4b3ec',
-  brightCyan: '#89d3d8',
-  brightWhite: '#f1f2f4',
-};
-
 interface Props {
   sessionId: string;
-  onExit?: (code: number | null) => void;
+  theme: ITheme;
+  /** Changing this value moves keyboard focus back into the terminal. */
+  focusKey?: number;
 }
 
-export function TerminalView({ sessionId, onExit }: Props) {
+export function TerminalView({ sessionId, theme, focusKey }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
-  const onExitRef = useRef(onExit);
-  onExitRef.current = onExit;
+  const termRef = useRef<Terminal | null>(null);
+  const themeRef = useRef(theme);
+  themeRef.current = theme;
 
   useEffect(() => {
     const host = hostRef.current!;
@@ -51,8 +30,9 @@ export function TerminalView({ sessionId, onExit }: Props) {
       cursorBlink: true,
       scrollback: 5000,
       allowProposedApi: true,
-      theme,
+      theme: themeRef.current,
     });
+    termRef.current = term;
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.loadAddon(new WebLinksAddon());
@@ -61,18 +41,20 @@ export function TerminalView({ sessionId, onExit }: Props) {
     const send = (msg: object) => ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify(msg));
 
     const sendSize = () => {
-      if (!host.clientWidth || !host.clientHeight) return;
+      if (disposed || !term.element || !host.clientWidth || !host.clientHeight) return;
       fit.fit();
       send({ t: 'resize', cols: term.cols, rows: term.rows });
     };
 
     term.attachCustomKeyEventHandler((e) => {
-      if (e.type !== 'keydown') return true;
-      // Shift+Enter inserts a newline in Claude's prompt (same bytes as Alt+Enter).
+      // Shift+Enter inserts a newline in Claude's prompt: send a line feed (Ctrl+J).
+      // Swallow the keypress too, or xterm sends an extra \r that submits the prompt.
       if (e.key === 'Enter' && e.shiftKey) {
-        send({ t: 'in', d: '\x1b\r' });
+        if (e.type === 'keydown') send({ t: 'in', d: '\n' });
+        e.preventDefault();
         return false;
       }
+      if (e.type !== 'keydown') return true;
       // Ctrl+C copies when text is selected, otherwise it interrupts as usual.
       if (e.ctrlKey && e.key === 'c' && term.hasSelection()) {
         navigator.clipboard.writeText(term.getSelection());
@@ -90,7 +72,10 @@ export function TerminalView({ sessionId, onExit }: Props) {
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data);
       if (msg.t === 'out') term.write(msg.d);
-      if (msg.t === 'exit') onExitRef.current?.(msg.code);
+      if (msg.t === 'reset') {
+        term.reset();
+        sendSize();
+      }
     };
 
     let frame = 0;
@@ -117,6 +102,7 @@ export function TerminalView({ sessionId, onExit }: Props) {
 
     return () => {
       disposed = true;
+      termRef.current = null;
       cancelAnimationFrame(frame);
       observer.disconnect();
       ws.close();
@@ -124,5 +110,19 @@ export function TerminalView({ sessionId, onExit }: Props) {
     };
   }, [sessionId]);
 
-  return <div className="terminal-host" ref={hostRef} />;
+  useEffect(() => {
+    if (termRef.current) termRef.current.options.theme = theme;
+  }, [theme]);
+
+  useEffect(() => {
+    if (focusKey) termRef.current?.focus();
+  }, [focusKey]);
+
+  // Padding lives on the wrapper: the fit addon measures the inner element's
+  // parent and would count border-box padding as usable space.
+  return (
+    <div className="terminal-frame">
+      <div className="terminal-host" ref={hostRef} />
+    </div>
+  );
 }

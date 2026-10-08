@@ -15,6 +15,8 @@ export type SessionStatus = 'running' | 'exited';
 
 export interface SessionInfo {
   id: string;
+  projectId: string;
+  name: string;
   cwd: string;
   status: SessionStatus;
   exitCode: number | null;
@@ -23,8 +25,10 @@ export interface SessionInfo {
 
 /**
  * One claude process in a PTY. The PTY output is mirrored into a headless
- * terminal so a client connecting later (page reload, second tab) receives
- * the current screen instead of a raw replay of the byte stream.
+ * terminal so a client connecting later (page reload, switching sessions)
+ * receives the current screen instead of a raw replay of the byte stream.
+ *
+ * Events: 'data' (output chunk), 'reset' (process restarted), 'change' (info changed).
  */
 export class Session extends EventEmitter {
   readonly id = randomUUID();
@@ -32,36 +36,66 @@ export class Session extends EventEmitter {
   status: SessionStatus = 'running';
   exitCode: number | null = null;
 
-  private readonly proc: IPty;
-  private readonly mirror: InstanceType<typeof HeadlessTerminal>;
-  private readonly serializer: InstanceType<typeof SerializeAddon>;
+  private proc!: IPty;
+  private mirror!: InstanceType<typeof HeadlessTerminal>;
+  private serializer!: InstanceType<typeof SerializeAddon>;
 
-  constructor(readonly cwd: string, cols = 120, rows = 32) {
+  constructor(
+    readonly projectId: string,
+    readonly cwd: string,
+    public name: string,
+    private cols = 120,
+    private rows = 32,
+  ) {
     super();
-    this.mirror = new HeadlessTerminal({ cols, rows, scrollback: SCROLLBACK, allowProposedApi: true });
+    this.start();
+  }
+
+  private start() {
+    this.mirror = new HeadlessTerminal({ cols: this.cols, rows: this.rows, scrollback: SCROLLBACK, allowProposedApi: true });
     this.serializer = new SerializeAddon();
     this.mirror.loadAddon(this.serializer);
+    this.status = 'running';
+    this.exitCode = null;
 
     const [file, args] = claudeCommand();
-    this.proc = pty.spawn(file, args, {
+    const proc = pty.spawn(file, args, {
       name: 'xterm-256color',
-      cols,
-      rows,
-      cwd,
+      cols: this.cols,
+      rows: this.rows,
+      cwd: this.cwd,
       env: { ...cleanEnv(), TERM: 'xterm-256color', COLORTERM: 'truecolor' },
     });
+    this.proc = proc;
+    const mirror = this.mirror;
 
     // Emit only once the mirror has parsed the chunk, so a snapshot taken at any
     // moment followed by the live stream never drops or duplicates output.
-    this.proc.onData((data) => {
-      this.mirror.write(data, () => this.emit('data', data));
+    proc.onData((data) => {
+      if (this.proc !== proc) return;
+      mirror.write(data, () => this.emit('data', data));
     });
-    this.proc.onExit(({ exitCode }) => {
+    proc.onExit(({ exitCode }) => {
+      if (this.proc !== proc) return; // a restart already replaced this process
       this.status = 'exited';
       this.exitCode = exitCode;
-      // Queue behind pending output so clients see the last lines before the exit.
-      this.mirror.write('', () => this.emit('exit', exitCode));
+      // Queue behind pending output so clients see the last lines before the change.
+      mirror.write('', () => this.emit('change'));
     });
+  }
+
+  restart() {
+    const old = this.proc;
+    this.mirror.dispose();
+    this.start();
+    if (old) old.kill();
+    this.emit('reset');
+    this.emit('change');
+  }
+
+  rename(name: string) {
+    this.name = name;
+    this.emit('change');
   }
 
   write(data: string) {
@@ -70,7 +104,9 @@ export class Session extends EventEmitter {
 
   resize(cols: number, rows: number) {
     if (this.status !== 'running') return;
-    if (cols < 2 || rows < 2 || (cols === this.proc.cols && rows === this.proc.rows)) return;
+    if (cols < 2 || rows < 2 || (cols === this.cols && rows === this.rows)) return;
+    this.cols = cols;
+    this.rows = rows;
     this.proc.resize(cols, rows);
     this.mirror.resize(cols, rows);
   }
@@ -80,18 +116,22 @@ export class Session extends EventEmitter {
     return this.serializer.serialize({ scrollback: SCROLLBACK });
   }
 
-  kill() {
-    if (this.status === 'running') this.proc.kill();
-  }
-
   dispose() {
-    this.kill();
+    if (this.status === 'running') this.proc.kill();
     this.mirror.dispose();
     this.removeAllListeners();
   }
 
   info(): SessionInfo {
-    return { id: this.id, cwd: this.cwd, status: this.status, exitCode: this.exitCode, createdAt: this.createdAt };
+    return {
+      id: this.id,
+      projectId: this.projectId,
+      name: this.name,
+      cwd: this.cwd,
+      status: this.status,
+      exitCode: this.exitCode,
+      createdAt: this.createdAt,
+    };
   }
 }
 
