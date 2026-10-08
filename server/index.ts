@@ -331,6 +331,16 @@ function shutdown() {
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
+server.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code !== 'EADDRINUSE') throw err;
+  console.error(
+    `\nPort ${PORT} is already in use: another AgentHub server is probably still running.\n` +
+      `Stop it (close its terminal or press Ctrl+C there), then run npm start again.\n` +
+      `To find it: netstat -ano | findstr :${PORT}\n`,
+  );
+  process.exit(1);
+});
+
 server.listen(PORT, HOST, () => {
   console.log(`AgentHub server on http://${HOST}:${PORT}`);
 });
