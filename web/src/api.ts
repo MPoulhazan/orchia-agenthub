@@ -16,6 +16,9 @@ export interface SessionInfo {
   activity: 'starting' | 'working' | 'waiting' | 'idle';
   detail: string | null;
   unseen: boolean;
+  model: string | null;
+  modelChoice: string | null;
+  effortChoice: string | null;
 }
 
 export interface Suggestion {
@@ -50,6 +53,8 @@ export const api = {
   createSession: (projectId: string) => request<SessionInfo>('/api/sessions', 'POST', { projectId }),
   renameSession: (id: string, name: string) => request(`/api/sessions/${id}`, 'PATCH', { name }),
   markSeen: (id: string) => request(`/api/sessions/${id}/seen`, 'POST'),
+  configureSession: (id: string, model: string | null, effort: string | null) =>
+    request(`/api/sessions/${id}/config`, 'POST', { model, effort }),
   resumeSession: (id: string) => request(`/api/sessions/${id}/resume`, 'POST'),
   /** Keeps the conversation unless `fresh`. */
   restartSession: (id: string, fresh = false) => request(`/api/sessions/${id}/restart`, 'POST', { fresh }),

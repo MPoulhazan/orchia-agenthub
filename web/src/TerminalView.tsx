@@ -81,6 +81,12 @@ export function TerminalView({ sessionId, theme, focusKey, fontSize = 13, autoFo
     ws.onopen = sendSize;
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data);
+      if (msg.t === 'snapshot') {
+        // Lay the saved screen out at the size it was captured at, then fit:
+        // writing it at another width would wrap every line wrongly.
+        term.resize(msg.cols, msg.rows);
+        term.write(msg.d, sendSize);
+      }
       if (msg.t === 'out') term.write(msg.d);
       if (msg.t === 'reset') {
         term.reset();

@@ -8,6 +8,8 @@ import { Session } from './session.ts';
 import { CONFIG_DIR, ProjectStore } from './projects.ts';
 import { activityFromHook, writeHookSettings } from './hooks.ts';
 import { SessionStore, hasTranscript } from './sessionStore.ts';
+import { isEffortLevel, isModelAlias, watchModel } from './models.ts';
+import type { LaunchChoices } from './session.ts';
 import { claudeProjectSuggestions, homeFolder, listFolder } from './folders.ts';
 
 const HOST = '127.0.0.1';
@@ -46,13 +48,22 @@ function addSession(session: Session) {
   sessions.set(session.id, session);
 }
 
-function createSession(projectId: string, cols?: number, rows?: number): Session {
+/** null (or missing) keeps Claude Code's default; anything else must be a known value. */
+function parseChoices(body: any): LaunchChoices {
+  const model = body.model ?? null;
+  const effort = body.effort ?? null;
+  if (model !== null && !isModelAlias(model)) throw new HttpError(400, 'Unknown model');
+  if (effort !== null && !isEffortLevel(effort)) throw new HttpError(400, 'Unknown effort level');
+  return { modelChoice: model, effortChoice: effort };
+}
+
+function createSession(projectId: string, cols?: number, rows?: number, choices?: LaunchChoices): Session {
   const project = projects.get(projectId);
   if (!project) throw new HttpError(404, 'Project not found');
   const taken = new Set([...sessions.values()].filter((s) => s.projectId === projectId).map((s) => s.name));
   let n = 1;
   while (taken.has(`Session ${n}`)) n++;
-  const session = new Session({ projectId: project.id, cwd: project.path, name: `Session ${n}`, hookSettings, cols, rows });
+  const session = new Session({ projectId: project.id, cwd: project.path, name: `Session ${n}`, hookSettings, cols, rows, ...choices });
   addSession(session);
   broadcast();
   return session;
@@ -147,7 +158,17 @@ const routes: [string, RegExp, Handler][] = [
 
   ['POST', /^\/api\/sessions$/, async (req) => {
     const body = await readJson(req);
-    return createSession(String(body.projectId ?? ''), body.cols, body.rows).info();
+    return createSession(String(body.projectId ?? ''), body.cols, body.rows, parseChoices(body)).info();
+  }],
+  ['POST', /^\/api\/sessions\/([\w-]+)\/config$/, async (req, _url, [id]) => {
+    const session = findSession(id);
+    const choices = parseChoices(await readJson(req));
+    // Relaunching mid-turn would cut Claude off; the UI only offers this when idle.
+    if (session.status === 'running' && (session.activity === 'working' || session.activity === 'waiting')) {
+      throw new HttpError(409, 'Claude is busy. Try again once it is idle.');
+    }
+    session.configure(choices, hasTranscript(session.claudeSessionId));
+    return { ok: true };
   }],
   ['PATCH', /^\/api\/sessions\/([\w-]+)$/, async (req, _url, [id]) => {
     const body = await readJson(req);
@@ -195,6 +216,7 @@ async function handleHook(req: http.IncomingMessage, res: http.ServerResponse) {
   if (!session || !sameSecret(token, session.token)) return sendJson(res, 403, { error: 'Forbidden' });
   const payload = await readJson(req);
   session.trackClaudeSession(payload?.session_id);
+  watchModel(payload, (model) => session.trackModel(model));
   const update = activityFromHook(payload);
   if (update) session.applyActivity(update);
   res.writeHead(204).end();
@@ -243,7 +265,8 @@ const server = http.createServer(async (req, res) => {
 // /api/events: server -> client {t:'state', projects, sessions}.
 // /api/sessions/:id/stream:
 //   client -> server {t:'in', d} keystrokes, {t:'resize', cols, rows}
-//   server -> client {t:'out', d} output, {t:'reset'} before a restarted process.
+//   server -> client {t:'snapshot', cols, rows, d} current screen on connect,
+//                    {t:'out', d} output, {t:'reset'} before a restarted process.
 
 const wss = new WebSocketServer({ noServer: true });
 
@@ -273,7 +296,8 @@ function attachEvents(ws: WebSocket) {
 function attachStream(ws: WebSocket, session: Session) {
   const send = (msg: object) => ws.readyState === ws.OPEN && ws.send(JSON.stringify(msg));
 
-  send({ t: 'out', d: session.snapshot() });
+  const snap = session.snapshot();
+  send({ t: 'snapshot', cols: snap.cols, rows: snap.rows, d: snap.data });
 
   const onData = (d: string) => send({ t: 'out', d });
   const onReset = () => send({ t: 'reset' });

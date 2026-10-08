@@ -52,6 +52,15 @@ Amber and blue sessions are listed under **Needs you** and counted in the tab
 title. The bell in the sidebar turns on desktop notifications, sent only while
 the tab is in the background.
 
+## Model and effort
+
+The chip next to the session name shows the model that last answered (read from
+the transcript and the `PostModelSwitch` hook) and the effort chosen in AgentHub.
+Changing them relaunches that session with `--resume --model … --effort …`: the
+conversation is kept and your global Claude settings are not touched (unlike
+typing `/model`, which saves a new default). An `/effort` typed inside Claude is
+not reflected in the chip.
+
 ## Environment
 
 | Variable          | Default        | Purpose                         |

@@ -27,10 +27,20 @@ export interface SessionInfo {
   detail: string | null;
   /** Claude finished or asked for something since the user last looked at it. */
   unseen: boolean;
+  /** Model id that last answered (e.g. claude-opus-5-5), once known. */
+  model: string | null;
+  /** Launch choices made in AgentHub; null means Claude Code's own default. */
+  modelChoice: string | null;
+  effortChoice: string | null;
+}
+
+export interface LaunchChoices {
+  modelChoice: string | null;
+  effortChoice: string | null;
 }
 
 /** What survives a server restart. */
-export interface SessionRecord {
+export interface SessionRecord extends Partial<LaunchChoices> {
   id: string;
   projectId: string;
   name: string;
@@ -38,9 +48,10 @@ export interface SessionRecord {
   createdAt: number;
   claudeSessionId: string;
   exited: boolean;
+  model?: string | null;
 }
 
-interface SessionOptions {
+interface SessionOptions extends Partial<LaunchChoices> {
   projectId: string;
   cwd: string;
   name: string;
@@ -71,6 +82,9 @@ export class Session extends EventEmitter {
   activity: Activity = 'starting';
   detail: string | null = null;
   unseen = false;
+  model: string | null;
+  modelChoice: string | null;
+  effortChoice: string | null;
   /** Shared with the hooks so only this session's claude can report its activity. */
   readonly token = randomBytes(24).toString('hex');
 
@@ -90,6 +104,9 @@ export class Session extends EventEmitter {
     this.name = restore?.name ?? opts.name;
     this.createdAt = restore?.createdAt ?? Date.now();
     this.claudeSessionId = restore?.claudeSessionId ?? randomUUID();
+    this.model = restore?.model ?? null;
+    this.modelChoice = restore?.modelChoice ?? opts.modelChoice ?? null;
+    this.effortChoice = restore?.effortChoice ?? opts.effortChoice ?? null;
     this.hookSettings = opts.hookSettings;
     this.cols = opts.cols ?? 120;
     this.rows = opts.rows ?? 32;
@@ -117,7 +134,12 @@ export class Session extends EventEmitter {
     this.detail = null;
     this.unseen = false;
 
-    const [file, args] = claudeCommand(this.hookSettings, resume ? ['--resume', this.claudeSessionId] : ['--session-id', this.claudeSessionId]);
+    const [file, args] = claudeCommand(this.hookSettings, [
+      ...(resume ? ['--resume', this.claudeSessionId] : ['--session-id', this.claudeSessionId]),
+      // Flags apply to this session only; /model would rewrite the user's default.
+      ...(this.modelChoice ? ['--model', this.modelChoice] : []),
+      ...(this.effortChoice ? ['--effort', this.effortChoice] : []),
+    ]);
     const proc = pty.spawn(file, args, {
       name: 'xterm-256color',
       cols: this.cols,
@@ -176,6 +198,20 @@ export class Session extends EventEmitter {
     this.relaunch(!fresh && hasTranscript);
   }
 
+  /** Relaunch with another model / effort, keeping the conversation. */
+  configure(choices: LaunchChoices, hasTranscript: boolean) {
+    this.modelChoice = choices.modelChoice;
+    this.effortChoice = choices.effortChoice;
+    this.model = null; // unknown until Claude reports it
+    this.restart({ fresh: false, hasTranscript });
+  }
+
+  trackModel(model: string | null) {
+    if (!model || model === this.model || this.status !== 'running') return;
+    this.model = model;
+    this.emit('change');
+  }
+
   /** Claude switches conversations on /clear; follow it so resuming picks the current one. */
   trackClaudeSession(id: unknown) {
     if (typeof id !== 'string' || !id || id === this.claudeSessionId) return;
@@ -227,9 +263,9 @@ export class Session extends EventEmitter {
     this.proc?.resize(cols, rows);
   }
 
-  /** Current screen + scrollback as an escape sequence string. */
-  snapshot(): string {
-    return this.serializer.serialize({ scrollback: SCROLLBACK });
+  /** Current screen + scrollback as escape sequences, with the size they were laid out at. */
+  snapshot(): { cols: number; rows: number; data: string } {
+    return { cols: this.cols, rows: this.rows, data: this.serializer.serialize({ scrollback: SCROLLBACK }) };
   }
 
   dispose() {
@@ -252,6 +288,9 @@ export class Session extends EventEmitter {
       activity: this.activity,
       detail: this.detail,
       unseen: this.unseen,
+      model: this.model,
+      modelChoice: this.modelChoice,
+      effortChoice: this.effortChoice,
     };
   }
 
@@ -264,6 +303,9 @@ export class Session extends EventEmitter {
       createdAt: this.createdAt,
       claudeSessionId: this.claudeSessionId,
       exited: this.status === 'exited',
+      model: this.model,
+      modelChoice: this.modelChoice,
+      effortChoice: this.effortChoice,
     };
   }
 }

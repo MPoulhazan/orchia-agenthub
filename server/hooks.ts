@@ -48,6 +48,7 @@ export function writeHookSettings(dir: string, port: number): string {
       Notification: on([...WAITING_NOTIFICATIONS].join('|')),
       Stop: on(),
       StopFailure: on(),
+      PostModelSwitch: on(),
     },
   };
 

@@ -4,6 +4,7 @@ import { api, type Project, type SessionInfo } from './api';
 import { TerminalView } from './TerminalView';
 import { ConfirmButton } from './ui';
 import { StatusDot, statusLabel, statusOf } from './status';
+import { ModelPicker } from './ModelPicker';
 
 interface Props {
   session: SessionInfo;
@@ -37,6 +38,7 @@ export function SessionPane({ session, project, theme, compact, active, focusKey
             {session.cwd}
           </span>
         )}
+        <ModelPicker session={session} />
         <StatusText session={session} compact={compact} />
         <span className="pane-spacer" />
 
