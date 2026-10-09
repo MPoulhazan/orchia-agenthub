@@ -24,6 +24,18 @@ export interface SessionInfo {
   permission: { id: string; tool: string; verb: string; target: string } | null;
 }
 
+/** One plan usage window, in whole percents; resetsAt is ms since epoch. */
+export interface LimitWindow {
+  usedPct: number;
+  resetsAt: number | null;
+}
+
+/** The account's 5-hour and weekly plan limits; null until a session reports them (Pro and Max only). */
+export interface RateLimits {
+  fiveHour: LimitWindow | null;
+  sevenDay: LimitWindow | null;
+}
+
 export interface Inspection {
   /** From Claude Code's status line; null until it first reports. */
   usage: {

@@ -11,7 +11,7 @@ import { SessionStore, hasTranscript } from './sessionStore.ts';
 import { isEffortLevel, isModelAlias, watchModel } from './models.ts';
 import type { LaunchChoices } from './session.ts';
 import { claudeProjectSuggestions, homeFolder, listFolder } from './folders.ts';
-import { gitSummary } from './inspector.ts';
+import { gitSummary, limitsFromStatusLine, type RateLimits } from './inspector.ts';
 
 const HOST = '127.0.0.1';
 const PORT = Number(process.env.AGENTHUB_PORT ?? 4317);
@@ -29,11 +29,15 @@ const sessionStore = new SessionStore(CONFIG_DIR);
 
 const eventClients = new Set<WebSocket>();
 
+/** Plan usage limits, as last reported by any session: they are shared by the whole account. */
+let limits: RateLimits | null = null;
+
 function state() {
   return {
     t: 'state',
     projects: projects.list(),
     sessions: [...sessions.values()].map((s) => s.info()),
+    limits,
   };
 }
 
@@ -262,8 +266,15 @@ async function handleHook(req: http.IncomingMessage, res: http.ServerResponse) {
 async function handleStatusLine(req: http.IncomingMessage, res: http.ServerResponse) {
   const session = reportingSession(req);
   if (!session) return sendJson(res, 403, { error: 'Forbidden' });
-  session.trackStatusLine(await readJson(req));
+  const payload = await readJson(req);
+  session.trackStatusLine(payload);
   res.writeHead(204).end();
+  // The status line refreshes often; only tell clients when the numbers move.
+  const next = limitsFromStatusLine(payload);
+  if (next && JSON.stringify(next) !== JSON.stringify(limits)) {
+    limits = next;
+    broadcast();
+  }
 }
 
 async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, url: URL) {

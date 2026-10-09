@@ -12,6 +12,7 @@ import { Inspector } from './Inspector';
 import { needsAttention, statusOf, timeAgo } from './status';
 import { setFavicon } from './favicon';
 import { pageActive, useNotifications } from './notifications';
+import { LimitBanner, LimitToasts, topLevel, useLimitAlerts } from './Limits';
 
 const SELECTED_KEY = 'agenthub.selectedSession';
 const SIDEBAR_KEY = 'agenthub.sidebar';
@@ -106,6 +107,8 @@ export function App() {
   }, [state, selected, selectedId]);
 
   const notify = useNotifications(sessions, projects, (id) => open(id));
+  const limits = state?.limits ?? null;
+  const limitAlerts = useLimitAlerts(limits, notify.state);
 
   // Sessions on screen while the tab is in front count as seen.
   const visibleIds = view === 'grid' ? gridSessions.map((s) => s.id) : selected ? [selected.id] : [];
@@ -137,13 +140,15 @@ export function App() {
   // Tab title and icon: what is on screen, plus how many sessions want the user.
   const attentionCount = sessions.filter(needsAttention).length;
   const anyWaiting = sessions.some((s) => statusOf(s) === 'waiting');
+  const limitLevel = topLevel(limits);
+  const nearLimit = limitLevel === 'high' || limitLevel === 'full';
   const shown = view === 'grid' ? 'Grid' : selected ? [selected.name, selectedProject?.name].filter(Boolean).join(' · ') : '';
   useEffect(() => {
     document.title = (attentionCount ? `(${attentionCount}) ` : '') + (shown ? `${shown} — AgentHub` : 'AgentHub');
   }, [attentionCount, shown]);
   useEffect(() => {
-    setFavicon(anyWaiting ? 'waiting' : attentionCount ? 'done' : 'none');
-  }, [anyWaiting, attentionCount > 0]);
+    setFavicon(anyWaiting ? 'waiting' : nearLimit ? 'limit' : attentionCount ? 'done' : 'none');
+  }, [anyWaiting, nearLimit, attentionCount > 0]);
 
   function setView(next: View) {
     // First time in an empty grid: show what is running instead of a blank screen.
@@ -280,6 +285,7 @@ export function App() {
           onOpenPalette={() => setPalette('root')}
           onAddProject={() => setPalette('root')}
           onSetTheme={theme.setPref}
+          limits={limits}
           notify={notify.state}
           onToggleNotify={notify.toggle}
         />
@@ -296,93 +302,99 @@ export function App() {
           onOpenPalette={() => setPalette('root')}
           onSelect={(s) => open(s.id)}
           onSetTheme={theme.setPref}
+          limits={limits}
         />
       )}
 
-      <main className="main">
-        {!state ? null : view === 'grid' ? (
-          <div className="grid-view">
-            <header className="grid-head">
-              <h2>Grid</h2>
-              <span className="grid-hint">
-                {gridSessions.length} of {sessions.length} session{sessions.length === 1 ? '' : 's'}
-                {gridSessions.length < Math.min(gridMax, sessions.length)
-                  ? ' · click a session to add it'
-                  : sessions.length > gridMax
-                    ? ' · grid is full, remove one to add another'
-                    : ''}
-              </span>
-              <span className="pane-spacer" />
-              <span className="grid-hint">Layout</span>
-              <div className="segmented segmented-text" role="radiogroup" aria-label="Grid layout">
-                {(['2x2', '3x2'] as const).map((value) => (
-                  <button key={value} role="radio" aria-checked={layout === value} onClick={() => setLayout(value)}>
-                    {value.replace('x', ' × ')}
-                  </button>
+      <div className="main-col">
+        <LimitBanner limits={limits} />
+        <main className="main">
+          {!state ? null : view === 'grid' ? (
+            <div className="grid-view">
+              <header className="grid-head">
+                <h2>Grid</h2>
+                <span className="grid-hint">
+                  {gridSessions.length} of {sessions.length} session{sessions.length === 1 ? '' : 's'}
+                  {gridSessions.length < Math.min(gridMax, sessions.length)
+                    ? ' · click a session to add it'
+                    : sessions.length > gridMax
+                      ? ' · grid is full, remove one to add another'
+                      : ''}
+                </span>
+                <span className="pane-spacer" />
+                <span className="grid-hint">Layout</span>
+                <div className="segmented segmented-text" role="radiogroup" aria-label="Grid layout">
+                  {(['2x2', '3x2'] as const).map((value) => (
+                    <button key={value} role="radio" aria-checked={layout === value} onClick={() => setLayout(value)}>
+                      {value.replace('x', ' × ')}
+                    </button>
+                  ))}
+                </div>
+              </header>
+            {gridSessions.length ? (
+              <div className="grid" data-count={gridSessions.length}>
+                {gridSessions.map((s) => (
+                  <SessionPane
+                    key={s.id}
+                    compact
+                    session={s}
+                    project={projectOf(s)}
+                    theme={terminalTheme}
+                    active={s.id === selected?.id}
+                    focusKey={s.id === selected?.id ? focusKey : undefined}
+                    onActivate={() => s.id !== selectedId && select(s.id)}
+                    onMaximize={() => maximize(s.id)}
+                    onToggleGrid={() => toggleGrid(s.id)}
+                  />
                 ))}
               </div>
-            </header>
-          {gridSessions.length ? (
-            <div className="grid" data-count={gridSessions.length}>
-              {gridSessions.map((s) => (
-                <SessionPane
-                  key={s.id}
-                  compact
-                  session={s}
-                  project={projectOf(s)}
-                  theme={terminalTheme}
-                  active={s.id === selected?.id}
-                  focusKey={s.id === selected?.id ? focusKey : undefined}
-                  onActivate={() => s.id !== selectedId && select(s.id)}
-                  onMaximize={() => maximize(s.id)}
-                  onToggleGrid={() => toggleGrid(s.id)}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="empty">
-              <div className="empty-body">
-                <h1>Nothing in the grid yet</h1>
-                <p className="muted">
-                  Click sessions in the sidebar to add them here, up to {gridMax}. Start a new one with <kbd>Alt N</kbd>.
-                </p>
+            ) : (
+              <div className="empty">
+                <div className="empty-body">
+                  <h1>Nothing in the grid yet</h1>
+                  <p className="muted">
+                    Click sessions in the sidebar to add them here, up to {gridMax}. Start a new one with <kbd>Alt N</kbd>.
+                  </p>
+                </div>
               </div>
+            )}
             </div>
-          )}
-          </div>
-        ) : selected ? (
-          <>
-            <div className="focus-view">
-              <SessionTabs
-                sessions={sessions.filter((s) => s.projectId === selected.projectId)}
-                selectedId={selected.id}
-                onSelect={(s) => open(s.id)}
-                onClose={(s) => api.closeSession(s.id)}
-                onRename={(s, name) => api.renameSession(s.id, name)}
-                onNew={() => selectedProject && newSession(selectedProject)}
-              />
-              <SessionPane
-                tabbed
-                session={selected}
-                project={selectedProject}
-                theme={terminalTheme}
-                focusKey={focusKey}
-                inGrid={gridIds.includes(selected.id)}
-                onToggleGrid={() => toggleGrid(selected.id)}
-                inspectorOpen={inspectorOpen}
-                onToggleInspector={toggleInspector}
-              />
-            </div>
-            {inspectorOpen && <Inspector session={selected} onClose={toggleInspector} />}
-          </>
-        ) : (
-          projects.length ? (
-            <EmptyState projects={projects} onOpenPalette={() => setPalette('root')} onOpenProject={openProject} />
+          ) : selected ? (
+            <>
+              <div className="focus-view">
+                <SessionTabs
+                  sessions={sessions.filter((s) => s.projectId === selected.projectId)}
+                  selectedId={selected.id}
+                  onSelect={(s) => open(s.id)}
+                  onClose={(s) => api.closeSession(s.id)}
+                  onRename={(s, name) => api.renameSession(s.id, name)}
+                  onNew={() => selectedProject && newSession(selectedProject)}
+                />
+                <SessionPane
+                  tabbed
+                  session={selected}
+                  project={selectedProject}
+                  theme={terminalTheme}
+                  focusKey={focusKey}
+                  inGrid={gridIds.includes(selected.id)}
+                  onToggleGrid={() => toggleGrid(selected.id)}
+                  inspectorOpen={inspectorOpen}
+                  onToggleInspector={toggleInspector}
+                />
+              </div>
+              {inspectorOpen && <Inspector session={selected} onClose={toggleInspector} />}
+            </>
           ) : (
-            <Welcome onOpenPalette={() => setPalette('root')} onAddPath={addPath} />
-          )
-        )}
-      </main>
+            projects.length ? (
+              <EmptyState projects={projects} onOpenPalette={() => setPalette('root')} onOpenProject={openProject} />
+            ) : (
+              <Welcome onOpenPalette={() => setPalette('root')} onAddPath={addPath} />
+            )
+          )}
+        </main>
+      </div>
+
+      <LimitToasts toasts={limitAlerts.toasts} onDismiss={limitAlerts.dismiss} />
 
       {palette && (
         <CommandPalette

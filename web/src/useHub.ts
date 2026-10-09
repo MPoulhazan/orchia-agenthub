@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { api, type Project, type SessionInfo } from './api';
+import { api, type Project, type RateLimits, type SessionInfo } from './api';
 
 export interface HubState {
   projects: Project[];
   sessions: SessionInfo[];
+  limits: RateLimits | null;
 }
 
 /** Live projects + sessions pushed by the server; reconnects if the server restarts. */
@@ -21,7 +22,7 @@ export function useHub() {
       ws.onopen = () => setConnected(true);
       ws.onmessage = (e) => {
         const msg = JSON.parse(e.data);
-        if (msg.t === 'state') setState({ projects: msg.projects, sessions: msg.sessions });
+        if (msg.t === 'state') setState({ projects: msg.projects, sessions: msg.sessions, limits: msg.limits ?? null });
       };
       ws.onclose = () => {
         if (closed) return;

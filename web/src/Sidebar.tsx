@@ -7,6 +7,8 @@ import { storage } from './storage';
 import { PermissionButtons, PermissionText } from './Permission';
 import { StatusDot, initials, needsAttention, statusLabel, statusOf } from './status';
 import type { NotifyState } from './notifications';
+import type { RateLimits } from './api';
+import { UsageMeters } from './Limits';
 
 export type View = 'focus' | 'grid';
 
@@ -28,6 +30,7 @@ interface Props {
   onOpenPalette: () => void;
   onAddProject: () => void;
   onSetTheme: (pref: ThemePref) => void;
+  limits: RateLimits | null;
   notify: NotifyState;
   onToggleNotify: () => void;
 }
@@ -146,6 +149,8 @@ export function Sidebar(props: Props) {
           );
         })}
       </nav>
+
+      <UsageMeters limits={props.limits} />
 
       <div className="sidebar-foot">
         {props.connected ? <span /> : <span className="offline">Server offline · reconnecting</span>}
@@ -266,6 +271,7 @@ export function Rail(props: {
   onOpenPalette: () => void;
   onSelect: (s: SessionInfo) => void;
   onSetTheme: (pref: ThemePref) => void;
+  limits: RateLimits | null;
 }) {
   const projectName = (id: string) => props.projects.find((p) => p.id === id)?.name ?? '';
   const waiting = props.sessions.filter(needsAttention).sort((a, b) => Number(statusOf(b) === 'waiting') - Number(statusOf(a) === 'waiting'));
@@ -312,6 +318,7 @@ export function Rail(props: {
         ))}
       </div>
       <span className="pane-spacer" />
+      <UsageMeters limits={props.limits} compact />
       <button
         className="icon-btn"
         title={`Theme: ${props.themePref} (click for ${nextTheme[props.themePref]})`}

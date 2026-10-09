@@ -1,7 +1,7 @@
-/** What the tab icon signals: nothing, a session blocked on the user, or a finished one not looked at yet. */
-export type FaviconBadge = 'none' | 'waiting' | 'done';
+/** What the tab icon signals: nothing, a session blocked on the user, a plan limit at 90% or more, or a finished session not looked at yet. */
+export type FaviconBadge = 'none' | 'waiting' | 'limit' | 'done';
 
-const BADGE_COLOR: Record<Exclude<FaviconBadge, 'none'>, string> = { waiting: '#ffe24d', done: '#8da2ff' };
+const BADGE_COLOR: Record<Exclude<FaviconBadge, 'none'>, string> = { waiting: '#ffe24d', limit: '#f07b72', done: '#8da2ff' };
 
 /** A dark tile with the 2×2 grid mark, one cell lit; a dot in the corner when something wants attention. */
 function faviconSvg(badge: FaviconBadge): string {

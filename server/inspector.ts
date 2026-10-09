@@ -50,6 +50,35 @@ export function usageFromStatusLine(payload: any): Usage {
   };
 }
 
+/** One plan usage window: how much is used, and when it starts over (ms since epoch). */
+export interface LimitWindow {
+  usedPct: number;
+  resetsAt: number | null;
+}
+
+/** The subscription's 5-hour and weekly limits. They belong to the account, not to a session. */
+export interface RateLimits {
+  fiveHour: LimitWindow | null;
+  sevenDay: LimitWindow | null;
+}
+
+function limitWindow(raw: any): LimitWindow | null {
+  const usedPct = num(raw?.used_percentage);
+  if (usedPct === null) return null;
+  const at = raw.resets_at;
+  // Seconds since epoch; tolerate an ISO date too.
+  const resetsAt = typeof at === 'number' ? at * 1000 : typeof at === 'string' ? Date.parse(at) || null : null;
+  // Whole percents, like Claude Code shows them; also keeps refreshes from rebroadcasting noise.
+  return { usedPct: Math.floor(usedPct), resetsAt };
+}
+
+/** Only Pro and Max plans get these, and only after the session's first reply; null otherwise. */
+export function limitsFromStatusLine(payload: any): RateLimits | null {
+  const fiveHour = limitWindow(payload?.rate_limits?.five_hour);
+  const sevenDay = limitWindow(payload?.rate_limits?.seven_day);
+  return fiveHour || sevenDay ? { fiveHour, sevenDay } : null;
+}
+
 function readStatusLine(file: string): string | null {
   try {
     const statusLine = JSON.parse(readFileSync(file, 'utf8'))?.statusLine;
