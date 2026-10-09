@@ -7,6 +7,7 @@ import { storage } from './storage';
 import { Rail, Sidebar, type View } from './Sidebar';
 import { CommandPalette, type PaletteMode } from './CommandPalette';
 import { SessionPane } from './SessionPane';
+import { SessionTabs } from './SessionTabs';
 import { needsAttention, timeAgo } from './status';
 import { pageActive, useNotifications } from './notifications';
 
@@ -54,6 +55,10 @@ export function App() {
   const selected = sessions.find((s) => s.id === selectedId) ?? null;
   const selectedProject = projects.find((p) => p.id === selected?.projectId) ?? null;
   if (selectedProject) lastProjectId.current = selectedProject.id;
+  if (selected && selected.id === pendingId.current) pendingId.current = null;
+  // The selected session's tab row, remembered so closing it can land on a neighbour.
+  const lastTabs = useRef<string[]>([]);
+  if (selected) lastTabs.current = sessions.filter((s) => s.projectId === selected.projectId).map((s) => s.id);
   const projectOf = (s: SessionInfo) => projects.find((p) => p.id === s.projectId) ?? null;
 
   const gridMax = GRID_CAPACITY[layout];
@@ -84,11 +89,16 @@ export function App() {
     if (alive.length !== gridIds.length) saveGrid(alive);
   }, [state]);
 
-  // When the selected session disappears, fall back to a neighbour in the same project.
+  // When the selected session disappears, fall back to the tab before it (or after it) in the same project.
   useEffect(() => {
     if (!state || selected || !selectedId || selectedId === pendingId.current) return;
-    const sibling = sessions.filter((s) => s.projectId === lastProjectId.current).at(-1);
-    select(sibling?.id ?? null);
+    const tabs = lastTabs.current;
+    const at = tabs.indexOf(selectedId);
+    const alive = (id: string) => sessions.some((s) => s.id === id);
+    const before = tabs.slice(0, Math.max(at, 0)).reverse().find(alive);
+    const after = tabs.slice(at + 1).find(alive);
+    const sibling = before ?? after ?? sessions.filter((s) => s.projectId === lastProjectId.current).at(-1)?.id;
+    select(sibling ?? null);
   }, [state, selected, selectedId]);
 
   const notify = useNotifications(sessions, projects, (id) => open(id));
@@ -321,14 +331,25 @@ export function App() {
           )}
           </div>
         ) : selected ? (
-          <SessionPane
-            session={selected}
-            project={selectedProject}
-            theme={terminalTheme}
-            focusKey={focusKey}
-            inGrid={gridIds.includes(selected.id)}
-            onToggleGrid={() => toggleGrid(selected.id)}
-          />
+          <div className="focus-view">
+            <SessionTabs
+              sessions={sessions.filter((s) => s.projectId === selected.projectId)}
+              selectedId={selected.id}
+              onSelect={(s) => open(s.id)}
+              onClose={(s) => api.closeSession(s.id)}
+              onRename={(s, name) => api.renameSession(s.id, name)}
+              onNew={() => selectedProject && newSession(selectedProject)}
+            />
+            <SessionPane
+              tabbed
+              session={selected}
+              project={selectedProject}
+              theme={terminalTheme}
+              focusKey={focusKey}
+              inGrid={gridIds.includes(selected.id)}
+              onToggleGrid={() => toggleGrid(selected.id)}
+            />
+          </div>
         ) : (
           projects.length ? (
             <EmptyState projects={projects} onOpenPalette={() => setPalette('root')} onOpenProject={openProject} />

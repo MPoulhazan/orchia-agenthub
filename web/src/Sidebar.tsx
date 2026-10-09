@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Bell, BellOff, ChevronRight, LayoutGrid, Monitor, Moon, MoreHorizontal, PanelLeft, Plus, Search, Square, Sun, X } from 'lucide-react';
 import type { Project, SessionInfo } from './api';
 import type { ThemePref } from './theme';
-import { ConfirmButton, Menu } from './ui';
+import { ConfirmButton, Menu, RenameInput } from './ui';
 import { storage } from './storage';
 import { StatusDot, initials, needsAttention, statusLabel, statusOf } from './status';
 import type { NotifyState } from './notifications';
@@ -328,23 +328,11 @@ function SessionRow({
     <div className="tree-session" data-selected={selected} onClick={onSelect} onDoubleClick={() => setEditing(true)}>
       <StatusDot session={session} />
       {editing ? (
-        <input
-          className="rename-input"
-          autoFocus
-          defaultValue={session.name}
-          onFocus={(e) => e.target.select()}
-          onClick={(e) => e.stopPropagation()}
-          onBlur={(e) => {
-            const name = e.target.value.trim();
-            if (name && name !== session.name) onRename(name);
+        <RenameInput
+          name={session.name}
+          onDone={(name) => {
+            if (name) onRename(name);
             setEditing(false);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') e.currentTarget.blur();
-            if (e.key === 'Escape') {
-              e.currentTarget.value = session.name;
-              e.currentTarget.blur();
-            }
           }}
         />
       ) : (

@@ -12,6 +12,8 @@ interface Props {
   theme: ITheme;
   /** Grid cell: tighter header, smaller font, actions to maximize or leave the grid. */
   compact?: boolean;
+  /** Focus view under session tabs: the tab names the session and closes it. */
+  tabbed?: boolean;
   active?: boolean;
   focusKey?: number;
   inGrid?: boolean;
@@ -20,19 +22,25 @@ interface Props {
   onToggleGrid?: () => void;
 }
 
-export function SessionPane({ session, project, theme, compact, active, focusKey, inGrid, onActivate, onMaximize, onToggleGrid }: Props) {
+export function SessionPane({ session, project, theme, compact, tabbed, active, focusKey, inGrid, onActivate, onMaximize, onToggleGrid }: Props) {
   const exited = session.status === 'exited';
   const paused = session.status === 'suspended';
 
   return (
-    <section className="pane" data-compact={compact} data-active={active} data-status={statusOf(session)} onFocusCapture={onActivate} onMouseDown={onActivate}>
+    <section className="pane" data-compact={compact} data-tabbed={tabbed} data-active={active} data-status={statusOf(session)} onFocusCapture={onActivate} onMouseDown={onActivate}>
       <header className="pane-bar" onDoubleClick={compact ? onMaximize : undefined}>
         {compact && <StatusDot session={session} />}
-        <div className="crumbs">
-          <span className="crumb-project">{project?.name}</span>
-          <span className="crumb-sep">/</span>
-          <span className="crumb-session">{session.name}</span>
-        </div>
+        {tabbed ? (
+          <div className="crumbs">
+            <span className="crumb-session">{project?.name}</span>
+          </div>
+        ) : (
+          <div className="crumbs">
+            <span className="crumb-project">{project?.name}</span>
+            <span className="crumb-sep">/</span>
+            <span className="crumb-session">{session.name}</span>
+          </div>
+        )}
         {!compact && (
           <span className="pane-path" title={session.cwd}>
             {session.cwd}
@@ -64,7 +72,7 @@ export function SessionPane({ session, project, theme, compact, active, focusKey
             >
               <LayoutGrid size={14} />
             </button>
-            {exited ? (
+            {tabbed ? null : exited ? (
               <button className="icon-btn" title="Close" onClick={() => api.closeSession(session.id)}>
                 <X size={15} />
               </button>

@@ -37,6 +37,30 @@ export function ConfirmButton({
   );
 }
 
+/** Inline name editor: Enter or blur saves, Escape cancels. Reports null when nothing changed. */
+export function RenameInput({ name, onDone }: { name: string; onDone: (name: string | null) => void }) {
+  return (
+    <input
+      className="rename-input"
+      autoFocus
+      defaultValue={name}
+      onFocus={(e) => e.target.select()}
+      onClick={(e) => e.stopPropagation()}
+      onBlur={(e) => {
+        const next = e.target.value.trim();
+        onDone(next && next !== name ? next : null);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur();
+        if (e.key === 'Escape') {
+          e.currentTarget.value = name;
+          e.currentTarget.blur();
+        }
+      }}
+    />
+  );
+}
+
 export interface MenuItem {
   label: string;
   onSelect: () => void;
