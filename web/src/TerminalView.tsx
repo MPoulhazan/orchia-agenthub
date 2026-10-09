@@ -32,7 +32,7 @@ export function TerminalView({ sessionId, theme, focusKey, fontSize = 13, autoFo
     let disposed = false;
 
     const term = new Terminal({
-      fontFamily: '"JetBrains Mono Variable", ui-monospace, monospace',
+      fontFamily: '"Atkinson Hyperlegible Mono Variable", ui-monospace, monospace',
       fontSize: fontSizeRef.current,
       lineHeight: 1.2,
       cursorBlink: true,
@@ -101,7 +101,7 @@ export function TerminalView({ sessionId, theme, focusKey, fontSize = 13, autoFo
     });
 
     // Wait for the monospace font so the cell grid is measured correctly.
-    document.fonts.load('13px "JetBrains Mono Variable"').finally(() => {
+    document.fonts.load('13px "Atkinson Hyperlegible Mono Variable"').finally(() => {
       if (disposed) return;
       term.open(host);
       try {

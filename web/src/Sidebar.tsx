@@ -49,7 +49,15 @@ export function Sidebar(props: Props) {
   return (
     <aside className="sidebar">
       <div className="sidebar-head">
-        <span className="wordmark">AgentHub</span>
+        <span className="wordmark">
+          <span className="glyph" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+            <i />
+          </span>
+          AgentHub
+        </span>
         <span className="pane-spacer" />
         <ViewSwitch view={props.view} onSetView={props.onSetView} />
         <button className="icon-btn" title="Collapse sidebar" onClick={props.onCollapse}>
@@ -201,14 +209,13 @@ function Attention(props: {
       <div className="attention">
         {list.map((s) => (
           <button key={s.id} className="attention-row" data-selected={s.id === props.selectedId} onClick={() => props.onSelect(s)}>
-            <StatusDot session={s} />
-            <span className="attention-text">
-              <span className="attention-title">
-                {projectName(s.projectId)} <span className="crumb-sep">/</span> {s.name}
-              </span>
-              <span className="attention-detail">
-                {statusOf(s) === 'waiting' ? (s.detail ?? 'Needs your input') : (s.detail ?? 'Finished')}
-              </span>
+            <span className="attention-title">
+              {statusOf(s) === 'waiting' ? <span className="mark">Needs you</span> : <span className="mark" data-tone="done">Done</span>}
+              <b>{s.name}</b>
+              <span className="attention-project">· {projectName(s.projectId)}</span>
+            </span>
+            <span className="attention-detail">
+              {statusOf(s) === 'waiting' ? (s.detail ?? 'Needs your input') : (s.detail ?? 'Finished')}
             </span>
           </button>
         ))}

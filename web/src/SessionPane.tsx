@@ -25,7 +25,7 @@ export function SessionPane({ session, project, theme, compact, active, focusKey
   const paused = session.status === 'suspended';
 
   return (
-    <section className="pane" data-compact={compact} data-active={active} onFocusCapture={onActivate} onMouseDown={onActivate}>
+    <section className="pane" data-compact={compact} data-active={active} data-status={statusOf(session)} onFocusCapture={onActivate} onMouseDown={onActivate}>
       <header className="pane-bar" onDoubleClick={compact ? onMaximize : undefined}>
         {compact && <StatusDot session={session} />}
         <div className="crumbs">
