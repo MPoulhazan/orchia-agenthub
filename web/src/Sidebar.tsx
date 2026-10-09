@@ -4,7 +4,7 @@ import type { Project, SessionInfo } from './api';
 import type { ThemePref } from './theme';
 import { ConfirmButton, Menu } from './ui';
 import { storage } from './storage';
-import { StatusDot, needsAttention, statusOf } from './status';
+import { StatusDot, initials, needsAttention, statusLabel, statusOf } from './status';
 import type { NotifyState } from './notifications';
 
 export type View = 'focus' | 'grid';
@@ -83,7 +83,7 @@ export function Sidebar(props: Props) {
       <nav className="tree">
         {projects.length === 0 && (
           <button className="tree-empty" onClick={props.onAddProject}>
-            Add a project to get started
+            No projects yet. Add a folder and start a Claude Code session in it.
           </button>
         )}
         {projects.map((project) => {
@@ -237,25 +237,47 @@ export function ViewSwitch({ view, onSetView, vertical }: { view: View; onSetVie
   );
 }
 
-/** Collapsed sidebar: layout controls and one dot per session. */
+/** Collapsed sidebar: one tile per session (initials + status), and what needs you. */
 export function Rail(props: {
   view: View;
   projects: Project[];
   sessions: SessionInfo[];
   selectedId: string | null;
+  gridIds: string[];
+  themePref: ThemePref;
   onSetView: (v: View) => void;
   onExpand: () => void;
   onOpenPalette: () => void;
   onSelect: (s: SessionInfo) => void;
+  onSetTheme: (pref: ThemePref) => void;
 }) {
   const projectName = (id: string) => props.projects.find((p) => p.id === id)?.name ?? '';
+  const waiting = props.sessions.filter(needsAttention).sort((a, b) => Number(statusOf(b) === 'waiting') - Number(statusOf(a) === 'waiting'));
+  const nextTheme: Record<ThemePref, ThemePref> = { system: 'light', light: 'dark', dark: 'system' };
+  const ThemeIcon = { system: Monitor, light: Sun, dark: Moon }[props.themePref];
+
   return (
     <aside className="rail">
+      <span className="glyph rail-glyph" aria-hidden="true">
+        <i />
+        <i />
+        <i />
+        <i />
+      </span>
       <button className="icon-btn" title="Expand sidebar" onClick={props.onExpand}>
         <PanelLeft size={15} />
       </button>
       <button className="icon-btn" title="Search (Ctrl K)" onClick={props.onOpenPalette}>
         <Search size={15} />
+      </button>
+      <button
+        className="icon-btn rail-bell"
+        title={waiting.length ? `${waiting.length} need${waiting.length > 1 ? '' : 's'} you · open ${waiting[0].name}` : 'Nothing needs you'}
+        disabled={!waiting.length}
+        onClick={() => waiting[0] && props.onSelect(waiting[0])}
+      >
+        <Bell size={15} />
+        {waiting.length > 0 && <span className="rail-count">{waiting.length}</span>}
       </button>
       <ViewSwitch view={props.view} onSetView={props.onSetView} vertical />
       <div className="rail-sessions">
@@ -264,13 +286,23 @@ export function Rail(props: {
             key={s.id}
             className="rail-session"
             data-selected={s.id === props.selectedId}
-            title={`${projectName(s.projectId)} / ${s.name}${i < 9 ? `  (Alt ${i + 1})` : ''}`}
+            data-in-grid={props.gridIds.includes(s.id)}
+            title={`${s.name} · ${projectName(s.projectId)} · ${statusLabel[statusOf(s)]}${i < 9 ? `  (Alt ${i + 1})` : ''}`}
             onClick={() => props.onSelect(s)}
           >
+            {initials(s.name)}
             <StatusDot session={s} />
           </button>
         ))}
       </div>
+      <span className="pane-spacer" />
+      <button
+        className="icon-btn"
+        title={`Theme: ${props.themePref} (click for ${nextTheme[props.themePref]})`}
+        onClick={() => props.onSetTheme(nextTheme[props.themePref])}
+      >
+        <ThemeIcon size={14} />
+      </button>
     </aside>
   );
 }

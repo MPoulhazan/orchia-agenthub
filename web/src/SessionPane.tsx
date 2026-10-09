@@ -3,7 +3,7 @@ import { LayoutGrid, Maximize2, RotateCcw, X } from 'lucide-react';
 import { api, type Project, type SessionInfo } from './api';
 import { TerminalView } from './TerminalView';
 import { ConfirmButton } from './ui';
-import { StatusDot, statusLabel, statusOf } from './status';
+import { StatusDot, statusLabel, statusOf, timeAgo } from './status';
 import { ModelPicker } from './ModelPicker';
 
 interface Props {
@@ -92,23 +92,28 @@ export function SessionPane({ session, project, theme, compact, active, focusKey
 
       {(exited || paused) && (
         <div className="ended-bar" data-compact={compact}>
-          <span>
-            {paused
-              ? 'Paused after a restart'
-              : `Session ended${session.exitCode !== null && !compact ? ` with code ${session.exitCode}` : ''}`}
+          <StatusDot session={session} />
+          <span className="ended-text">
+            <b>
+              {paused
+                ? 'Paused after AgentHub restarted'
+                : `Claude exited${session.endedAt ? ` ${timeAgo(session.endedAt)}` : ''}${session.exitCode ? ` (code ${session.exitCode})` : ''}`}
+            </b>
+            {!compact && <span>The conversation is saved. Restart picks it up where it stopped.</span>}
           </span>
           <span className="pane-spacer" />
+          <button className="btn btn-primary" onClick={() => api.resumeSession(session.id)}>
+            <RotateCcw size={compact ? 12 : 14} />
+            {compact ? 'Restart' : 'Restart, keep the conversation'}
+          </button>
+          <button className="btn btn-secondary" onClick={() => api.restartSession(session.id, true)}>
+            New conversation
+          </button>
           {!compact && (
             <button className="btn btn-ghost" onClick={() => api.closeSession(session.id)}>
               Close
             </button>
           )}
-          <button className="btn btn-ghost" onClick={() => api.restartSession(session.id, true)}>
-            New conversation
-          </button>
-          <button className="btn btn-secondary" onClick={() => api.resumeSession(session.id)}>
-            Resume
-          </button>
         </div>
       )}
     </section>

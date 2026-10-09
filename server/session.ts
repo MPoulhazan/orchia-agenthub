@@ -22,6 +22,8 @@ export interface SessionInfo {
   cwd: string;
   status: SessionStatus;
   exitCode: number | null;
+  /** When claude last exited, while the session is ended. */
+  endedAt: number | null;
   createdAt: number;
   activity: Activity;
   detail: string | null;
@@ -79,6 +81,7 @@ export class Session extends EventEmitter {
   claudeSessionId: string;
   status: SessionStatus;
   exitCode: number | null = null;
+  endedAt: number | null = null;
   activity: Activity = 'starting';
   detail: string | null = null;
   unseen = false;
@@ -130,6 +133,7 @@ export class Session extends EventEmitter {
   private spawn(resume: boolean) {
     this.status = 'running';
     this.exitCode = null;
+    this.endedAt = null;
     this.activity = 'starting';
     this.detail = null;
     this.unseen = false;
@@ -167,6 +171,7 @@ export class Session extends EventEmitter {
       this.proc = null;
       this.status = 'exited';
       this.exitCode = exitCode;
+      this.endedAt = Date.now();
       // Queue behind pending output so clients see the last lines before the change.
       mirror.write('', () => this.emit('change'));
     });
@@ -284,6 +289,7 @@ export class Session extends EventEmitter {
       cwd: this.cwd,
       status: this.status,
       exitCode: this.exitCode,
+      endedAt: this.endedAt,
       createdAt: this.createdAt,
       activity: this.activity,
       detail: this.detail,

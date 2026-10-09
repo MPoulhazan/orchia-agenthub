@@ -31,3 +31,25 @@ export function StatusDot({ session }: { session: SessionInfo }) {
   const status = statusOf(session);
   return <span className="status-dot" data-status={status} title={session.detail ?? statusLabel[status]} />;
 }
+
+/** Two letters for the rail: "Scraper fix" → SF, "Session 1" → S1, "orchia" → OR. */
+export function initials(name: string): string {
+  const words = name.trim().split(/[\s_-]+/).filter(Boolean);
+  const letters = words.length > 1 ? words[0][0] + words[1][0] : (words[0] ?? '?').slice(0, 2);
+  return letters.toUpperCase();
+}
+
+/** "just now", "4 minutes ago", "yesterday", "3 days ago", "last week"… */
+export function timeAgo(time: number, now = Date.now()): string {
+  const minutes = Math.round((now - time) / 60_000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+  const days = Math.round(hours / 24);
+  if (days === 1) return 'yesterday';
+  if (days < 7) return `${days} days ago`;
+  if (days < 14) return 'last week';
+  if (days < 60) return `${Math.round(days / 7)} weeks ago`;
+  return `${Math.round(days / 30)} months ago`;
+}

@@ -12,6 +12,7 @@ export interface SessionInfo {
   cwd: string;
   status: 'running' | 'exited' | 'suspended';
   exitCode: number | null;
+  endedAt: number | null;
   createdAt: number;
   activity: 'starting' | 'working' | 'waiting' | 'idle';
   detail: string | null;

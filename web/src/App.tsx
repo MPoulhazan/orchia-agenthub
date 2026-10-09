@@ -1,20 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { api, type Project, type SessionInfo } from './api';
+import { Folder, FolderPlus } from 'lucide-react';
+import { api, type Project, type SessionInfo, type Suggestion } from './api';
 import { useHub } from './useHub';
 import { terminalThemes, useTheme } from './theme';
 import { storage } from './storage';
 import { Rail, Sidebar, type View } from './Sidebar';
 import { CommandPalette, type PaletteMode } from './CommandPalette';
 import { SessionPane } from './SessionPane';
-import { needsAttention } from './status';
+import { needsAttention, timeAgo } from './status';
 import { pageActive, useNotifications } from './notifications';
 
 const SELECTED_KEY = 'agenthub.selectedSession';
 const SIDEBAR_KEY = 'agenthub.sidebar';
 const VIEW_KEY = 'agenthub.view';
 const GRID_KEY = 'agenthub.grid';
-const GRID_MAX = 6;
-const GRID_AUTOFILL = 4;
+const LAYOUT_KEY = 'agenthub.gridLayout';
+type GridLayout = '2x2' | '3x2';
+const GRID_CAPACITY: Record<GridLayout, number> = { '2x2': 4, '3x2': 6 };
 
 function readGrid(): string[] {
   try {
@@ -32,6 +34,9 @@ export function App() {
   const [sidebarOpen, setSidebarOpen] = useState(() => storage.get(SIDEBAR_KEY) !== 'closed');
   const [view, setViewState] = useState<View>(() => (storage.get(VIEW_KEY) === 'grid' ? 'grid' : 'focus'));
   const [gridIds, setGridIds] = useState<string[]>(readGrid);
+  const [layout, setLayoutState] = useState<GridLayout>(() => (storage.get(LAYOUT_KEY) === '3x2' ? '3x2' : '2x2'));
+  // 3×2 needs the width, so the sidebar folds to the rail unless asked back for this time.
+  const [wideSidebar, setWideSidebar] = useState(false);
   const [palette, setPalette] = useState<PaletteMode | null>(null);
   const [focusKey, setFocusKey] = useState(0);
   const pendingId = useRef<string | null>(null);
@@ -51,7 +56,13 @@ export function App() {
   if (selectedProject) lastProjectId.current = selectedProject.id;
   const projectOf = (s: SessionInfo) => projects.find((p) => p.id === s.projectId) ?? null;
 
-  const gridSessions = gridIds.map((id) => sessions.find((s) => s.id === id)).filter((s): s is SessionInfo => !!s);
+  const gridMax = GRID_CAPACITY[layout];
+  const gridSessions = gridIds
+    .map((id) => sessions.find((s) => s.id === id))
+    .filter((s): s is SessionInfo => !!s)
+    .slice(0, gridMax);
+  const railForced = view === 'grid' && layout === '3x2' && !wideSidebar;
+  const showSidebar = sidebarOpen && !railForced;
   const terminalTheme = terminalThemes[theme.resolved];
 
   const refocus = () => setFocusKey((k) => k + 1);
@@ -119,7 +130,7 @@ export function App() {
     if (next === 'grid' && gridSessions.length === 0) {
       const running = sessions.filter((s) => s.status === 'running');
       const pick = selected ? [selected, ...running.filter((s) => s.id !== selected.id)] : running;
-      saveGrid(pick.slice(0, GRID_AUTOFILL).map((s) => s.id));
+      saveGrid(pick.slice(0, gridMax).map((s) => s.id));
     }
     setViewState(next);
     storage.set(VIEW_KEY, next);
@@ -128,14 +139,14 @@ export function App() {
 
   function toggleGrid(id: string) {
     if (gridIds.includes(id)) saveGrid(gridIds.filter((x) => x !== id));
-    else if (gridSessions.length < GRID_MAX) saveGrid([...gridSessions.map((s) => s.id), id]);
+    else if (gridSessions.length < gridMax) saveGrid([...gridSessions.map((s) => s.id), id]);
   }
 
   /** Show a session: in grid view it joins the grid (if there is room), otherwise it takes the focus view. */
   function open(id: string) {
     select(id);
     if (view === 'grid' && !gridIds.includes(id)) {
-      if (gridSessions.length < GRID_MAX) saveGrid([...gridSessions.map((s) => s.id), id]);
+      if (gridSessions.length < gridMax) saveGrid([...gridSessions.map((s) => s.id), id]);
       else setView('focus');
     }
     refocus();
@@ -146,7 +157,20 @@ export function App() {
     setView('focus');
   }
 
+  function setLayout(next: GridLayout) {
+    setLayoutState(next);
+    storage.set(LAYOUT_KEY, next);
+    setWideSidebar(false);
+    // Fill the new room with running sessions not shown yet.
+    const room = GRID_CAPACITY[next] - gridSessions.length;
+    const extra = sessions.filter((s) => s.status === 'running' && !gridIds.includes(s.id)).slice(0, Math.max(room, 0));
+    if (extra.length) saveGrid([...gridSessions.map((s) => s.id), ...extra.map((s) => s.id)]);
+    refocus();
+  }
+
   const toggleSidebar = () => {
+    if (railForced) return setWideSidebar(true);
+    if (wideSidebar) return setWideSidebar(false);
     setSidebarOpen((isOpen) => {
       storage.set(SIDEBAR_KEY, isOpen ? 'closed' : 'open');
       return !isOpen;
@@ -207,7 +231,7 @@ export function App() {
 
   return (
     <div className="app">
-      {sidebarOpen ? (
+      {showSidebar ? (
         <Sidebar
           view={view}
           gridIds={view === 'grid' ? gridIds : []}
@@ -235,16 +259,40 @@ export function App() {
           projects={projects}
           sessions={sessions}
           selectedId={selected?.id ?? null}
+          gridIds={view === 'grid' ? gridIds : []}
+          themePref={theme.pref}
           onSetView={setView}
           onExpand={toggleSidebar}
           onOpenPalette={() => setPalette('root')}
           onSelect={(s) => open(s.id)}
+          onSetTheme={theme.setPref}
         />
       )}
 
       <main className="main">
         {!state ? null : view === 'grid' ? (
-          gridSessions.length ? (
+          <div className="grid-view">
+            <header className="grid-head">
+              <h2>Grid</h2>
+              <span className="grid-hint">
+                {gridSessions.length} of {sessions.length} session{sessions.length === 1 ? '' : 's'}
+                {gridSessions.length < Math.min(gridMax, sessions.length)
+                  ? ' · click a session to add it'
+                  : sessions.length > gridMax
+                    ? ' · grid is full, remove one to add another'
+                    : ''}
+              </span>
+              <span className="pane-spacer" />
+              <span className="grid-hint">Layout</span>
+              <div className="segmented segmented-text" role="radiogroup" aria-label="Grid layout">
+                {(['2x2', '3x2'] as const).map((value) => (
+                  <button key={value} role="radio" aria-checked={layout === value} onClick={() => setLayout(value)}>
+                    {value.replace('x', ' × ')}
+                  </button>
+                ))}
+              </div>
+            </header>
+          {gridSessions.length ? (
             <div className="grid" data-count={gridSessions.length}>
               {gridSessions.map((s) => (
                 <SessionPane
@@ -266,11 +314,12 @@ export function App() {
               <div className="empty-body">
                 <h1>Nothing in the grid yet</h1>
                 <p className="muted">
-                  Click sessions in the sidebar to add them here, up to {GRID_MAX}. Start a new one with <kbd>Alt N</kbd>.
+                  Click sessions in the sidebar to add them here, up to {gridMax}. Start a new one with <kbd>Alt N</kbd>.
                 </p>
               </div>
             </div>
-          )
+          )}
+          </div>
         ) : selected ? (
           <SessionPane
             session={selected}
@@ -281,7 +330,11 @@ export function App() {
             onToggleGrid={() => toggleGrid(selected.id)}
           />
         ) : (
-          <EmptyState projects={projects} onOpenPalette={() => setPalette('root')} onOpenProject={openProject} />
+          projects.length ? (
+            <EmptyState projects={projects} onOpenPalette={() => setPalette('root')} onOpenProject={openProject} />
+          ) : (
+            <Welcome onOpenPalette={() => setPalette('root')} onAddPath={addPath} />
+          )
         )}
       </main>
 
@@ -308,23 +361,90 @@ function EmptyState(props: { projects: Project[]; onOpenPalette: () => void; onO
   return (
     <div className="empty">
       <div className="empty-body">
-        <h1>{props.projects.length ? 'Pick up where you left off' : 'Add your first project'}</h1>
+        <h1>Pick up where you left off</h1>
         <p className="muted">
           Each project runs its own Claude Code sessions. Open one, or search with <kbd>Ctrl K</kbd>.
         </p>
-        {props.projects.length > 0 && (
-          <div className="empty-list">
-            {props.projects.map((p) => (
-              <button key={p.id} className="empty-item" onClick={() => props.onOpenProject(p)}>
-                <span className="empty-item-name">{p.name}</span>
-                <span className="empty-item-path">{p.path}</span>
-              </button>
+        <div className="empty-list">
+          {props.projects.map((p) => (
+            <button key={p.id} className="empty-item" onClick={() => props.onOpenProject(p)}>
+              <span className="empty-item-name">{p.name}</span>
+              <span className="empty-item-path">{p.path}</span>
+            </button>
+          ))}
+        </div>
+        <button className="btn btn-primary" onClick={props.onOpenPalette}>
+          Open another project
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** First launch: what AgentHub does, and the folders Claude Code already knows about. */
+function Welcome(props: { onOpenPalette: () => void; onAddPath: (path: string) => Promise<void> }) {
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    api.suggestions().then((list) => setSuggestions(list.slice(0, 6))).catch(() => {});
+  }, []);
+  const when = (t: number) => (new Date(t).toDateString() === new Date().toDateString() ? 'today' : timeAgo(t));
+
+  return (
+    <div className="welcome">
+      <div className="welcome-body">
+        <h1>
+          Run all your Claude Code sessions <span className="hl">in one place</span>
+        </h1>
+        <p className="welcome-lead">
+          Add a project folder, then start sessions in it. AgentHub shows which sessions are working, which ones need
+          you, and which ones are done.
+        </p>
+        <div className="welcome-cta">
+          <button className="btn btn-primary btn-large" onClick={props.onOpenPalette}>
+            <FolderPlus size={16} />
+            Add a project folder
+          </button>
+          <span className="muted">
+            or press <kbd>Ctrl K</kbd>
+          </span>
+        </div>
+        {error && <p className="welcome-error">{error}</p>}
+        {suggestions.length > 0 && (
+          <div className="welcome-list">
+            <div className="welcome-list-head">
+              <b>Folders you used with Claude Code</b>
+              <span>found in ~/.claude/projects</span>
+            </div>
+            {suggestions.map((s) => (
+              <div key={s.path} className="welcome-item">
+                <Folder size={16} className="welcome-item-icon" />
+                <span className="welcome-item-text">
+                  <span className="welcome-item-name">{s.name}</span>
+                  <span className="welcome-item-path">{s.path}</span>
+                </span>
+                <span className="welcome-item-when">{when(s.lastUsed)}</span>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => props.onAddPath(s.path).catch((err: Error) => setError(err.message))}
+                >
+                  Add
+                </button>
+              </div>
             ))}
           </div>
         )}
-        <button className="btn btn-primary" onClick={props.onOpenPalette}>
-          {props.projects.length ? 'Open another project' : 'Add project'}
-        </button>
+        <div className="welcome-keys">
+          <span>
+            <kbd>Alt N</kbd> new session
+          </span>
+          <span>
+            <kbd>Alt G</kbd> focus or grid
+          </span>
+          <span>
+            <kbd>Alt 1…9</kbd> jump to a session
+          </span>
+        </div>
       </div>
     </div>
   );
