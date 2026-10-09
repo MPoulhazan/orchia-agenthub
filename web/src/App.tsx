@@ -9,7 +9,8 @@ import { CommandPalette, type PaletteMode } from './CommandPalette';
 import { SessionPane } from './SessionPane';
 import { SessionTabs } from './SessionTabs';
 import { Inspector } from './Inspector';
-import { needsAttention, timeAgo } from './status';
+import { needsAttention, statusOf, timeAgo } from './status';
+import { setFavicon } from './favicon';
 import { pageActive, useNotifications } from './notifications';
 
 const SELECTED_KEY = 'agenthub.selectedSession';
@@ -133,10 +134,16 @@ export function App() {
     }
   }, [state, visibleIds.join()]);
 
+  // Tab title and icon: what is on screen, plus how many sessions want the user.
   const attentionCount = sessions.filter(needsAttention).length;
+  const anyWaiting = sessions.some((s) => statusOf(s) === 'waiting');
+  const shown = view === 'grid' ? 'Grid' : selected ? [selected.name, selectedProject?.name].filter(Boolean).join(' · ') : '';
   useEffect(() => {
-    document.title = attentionCount ? `(${attentionCount}) AgentHub` : 'AgentHub';
-  }, [attentionCount]);
+    document.title = (attentionCount ? `(${attentionCount}) ` : '') + (shown ? `${shown} — AgentHub` : 'AgentHub');
+  }, [attentionCount, shown]);
+  useEffect(() => {
+    setFavicon(anyWaiting ? 'waiting' : attentionCount ? 'done' : 'none');
+  }, [anyWaiting, attentionCount > 0]);
 
   function setView(next: View) {
     // First time in an empty grid: show what is running instead of a blank screen.
