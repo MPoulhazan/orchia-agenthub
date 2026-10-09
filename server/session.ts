@@ -2,7 +2,7 @@ import { createRequire } from 'node:module';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import type { IPty } from '@lydell/node-pty';
-import type { Activity, ActivityUpdate } from './hooks.ts';
+import type { Activity, ActivityUpdate, PermissionAsk } from './hooks.ts';
 import { nextPlan, usageFromStatusLine, userStatusLine, type PlanItem, type Usage } from './inspector.ts';
 
 // These packages ship CommonJS entry points; load them through require.
@@ -35,6 +35,8 @@ export interface SessionInfo {
   /** Launch choices made in AgentHub; null means Claude Code's own default. */
   modelChoice: string | null;
   effortChoice: string | null;
+  /** The permission request AgentHub can answer right now, oldest first. */
+  permission: (PermissionAsk & { id: string }) | null;
 }
 
 export interface LaunchChoices {
@@ -55,6 +57,15 @@ export interface SessionRecord extends Partial<LaunchChoices> {
   usage?: Usage | null;
   plan?: PlanItem[];
   turns?: number;
+}
+
+/** A PermissionRequest hook kept open until someone answers it. */
+interface HeldPermission extends PermissionAsk {
+  id: string;
+  /** Tool name and input, to recognize the call once it runs. */
+  key: string;
+  /** Answers the hook; null lets Claude Code's own prompt decide. */
+  reply: (allow: boolean | null) => void;
 }
 
 interface SessionOptions extends Partial<LaunchChoices> {
@@ -99,6 +110,7 @@ export class Session extends EventEmitter {
   /** Shared with the hooks so only this session's claude can report its activity. */
   readonly token = randomBytes(24).toString('hex');
 
+  private held: HeldPermission[] = [];
   private readonly hookSettings: string | null;
   private cols: number;
   private rows: number;
@@ -181,6 +193,7 @@ export class Session extends EventEmitter {
     proc.onExit(({ exitCode }) => {
       if (this.proc !== proc) return; // a restart already replaced this process
       this.proc = null;
+      this.releasePermissions();
       this.status = 'exited';
       this.exitCode = exitCode;
       this.endedAt = Date.now();
@@ -193,6 +206,7 @@ export class Session extends EventEmitter {
   private relaunch(resume: boolean) {
     const old = this.proc;
     this.proc = null;
+    this.releasePermissions();
     old?.kill();
     this.resetMirror();
     this.spawn(resume);
@@ -253,9 +267,46 @@ export class Session extends EventEmitter {
 
   /** Turns and plan, from the hooks. */
   trackHook(payload: any) {
-    if (payload?.hook_event_name === 'UserPromptSubmit') this.turns++;
+    const event = payload?.hook_event_name;
+    if (event === 'UserPromptSubmit') this.turns++;
+    // The user answered Claude Code's own prompt: the call ran, or the turn moved on.
+    if (event === 'PostToolUse') this.releasePermissions((p) => p.key === permissionKey(payload));
+    if (event === 'UserPromptSubmit' || event === 'Stop' || event === 'StopFailure') this.releasePermissions();
     const plan = nextPlan(this.plan, payload);
     if (plan) this.plan = plan;
+  }
+
+  /** Keeps a PermissionRequest hook open until the user answers it here or in the terminal. */
+  holdPermission(ask: PermissionAsk, payload: any, reply: (allow: boolean | null) => void): string {
+    const id = randomUUID();
+    this.held.push({ ...ask, id, key: permissionKey(payload), reply });
+    this.emit('change');
+    return id;
+  }
+
+  /** Allow or deny from AgentHub. False when the request was already answered elsewhere. */
+  answerPermission(id: string, allow: boolean): boolean {
+    const held = this.held.find((p) => p.id === id);
+    if (!held) return false;
+    this.held = this.held.filter((p) => p !== held);
+    held.reply(allow);
+    if (!this.held.length) {
+      // Denying stops the turn, and Claude Code fires no Stop hook for that.
+      this.activity = allow ? 'working' : 'idle';
+      this.detail = null;
+      this.unseen = false;
+    }
+    this.emit('change');
+    return true;
+  }
+
+  /** Lets the matching held requests go without a decision (all by default). */
+  releasePermissions(which: (p: HeldPermission) => boolean = () => true) {
+    const gone = this.held.filter(which);
+    if (!gone.length) return;
+    this.held = this.held.filter((p) => !gone.includes(p));
+    for (const p of gone) p.reply(null);
+    this.emit('change');
   }
 
   applyActivity({ activity, detail }: ActivityUpdate) {
@@ -284,6 +335,9 @@ export class Session extends EventEmitter {
   write(data: string) {
     if (!this.proc) return;
     this.proc.write(data);
+    // Enter answers the prompt on screen (the oldest request); Esc or Ctrl+C rejects them all.
+    if (data.includes('\r')) this.releasePermissions((p) => p === this.held[0]);
+    if (data === '\x1b' || data === '\x03') this.releasePermissions();
     // Answering a prompt in the terminal unblocks Claude before any hook says so.
     if (this.activity === 'waiting' && data.includes('\r')) this.applyActivity({ activity: 'working' });
     // Esc / Ctrl+C interrupt a turn, and Claude Code fires no Stop hook in that case.
@@ -308,6 +362,7 @@ export class Session extends EventEmitter {
   }
 
   dispose() {
+    this.releasePermissions();
     const proc = this.proc;
     this.proc = null;
     proc?.kill();
@@ -331,6 +386,7 @@ export class Session extends EventEmitter {
       model: this.model,
       modelChoice: this.modelChoice,
       effortChoice: this.effortChoice,
+      permission: this.held[0] ? { id: this.held[0].id, tool: this.held[0].tool, verb: this.held[0].verb, target: this.held[0].target } : null,
     };
   }
 
@@ -351,6 +407,10 @@ export class Session extends EventEmitter {
       turns: this.turns,
     };
   }
+}
+
+function permissionKey(payload: any): string {
+  return JSON.stringify([payload?.tool_name, payload?.tool_input]);
 }
 
 // Markers set when the server itself is started from a Claude Code session or a

@@ -8,8 +8,7 @@ One dashboard for all your Claude Code sessions, organized by project.
 </picture>
 
 > [!NOTE]
-> These screenshots are mockups of the **Établi** theme. One thing in them is not
-> built yet: answering permissions from the inbox or the grid.
+> These screenshots are mockups of the **Établi** theme.
 
 ## A look around
 
@@ -127,6 +126,23 @@ added next to your own hooks, never replacing them, and only for these sessions.
 Amber and blue sessions are listed under **Needs you** and counted in the tab
 title. The bell in the sidebar turns on desktop notifications, sent only while
 the tab is in the background.
+
+## Permissions
+
+When Claude asks to run a command, edit a file or use another tool, the request
+shows in **Needs you** and at the bottom of its grid cell, with **Allow** and
+**Deny**. Claude Code's own prompt stays in the terminal: answer either one, and
+the first answer applies.
+
+- **Allow** allows this one call, like "Yes" in the terminal. To allow a command
+  for good, answer in the terminal.
+- **Deny** refuses the call and stops Claude's turn, like "No" in the terminal.
+  Type in the session to tell Claude what to do instead.
+- Questions and plans to review need the conversation's context, so they only
+  open the session.
+
+This uses the `PermissionRequest` hook: AgentHub keeps it open until you answer,
+for up to 10 minutes. Deny rules in your Claude settings still apply.
 
 ## Model and effort
 

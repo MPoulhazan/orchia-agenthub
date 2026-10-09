@@ -20,6 +20,8 @@ export interface SessionInfo {
   model: string | null;
   modelChoice: string | null;
   effortChoice: string | null;
+  /** A permission request that can be answered from AgentHub: "Run" + `npm test`. */
+  permission: { id: string; tool: string; verb: string; target: string } | null;
 }
 
 export interface Inspection {
@@ -84,6 +86,8 @@ export const api = {
   /** Keeps the conversation unless `fresh`. */
   restartSession: (id: string, fresh = false) => request(`/api/sessions/${id}/restart`, 'POST', { fresh }),
   closeSession: (id: string) => request(`/api/sessions/${id}`, 'DELETE'),
+  answerPermission: (id: string, permissionId: string, allow: boolean) =>
+    request(`/api/sessions/${id}/permission`, 'POST', { id: permissionId, allow }),
   inspect: (id: string) => request<Inspection>(`/api/sessions/${id}/inspect`),
 
   suggestions: () => request<Suggestion[]>('/api/suggestions'),

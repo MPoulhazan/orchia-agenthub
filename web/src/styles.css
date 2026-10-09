@@ -393,12 +393,23 @@ kbd {
 .attention-row {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  width: 100%;
+  gap: 7px;
   padding: 9px 10px;
   border: 1px solid var(--border);
   border-radius: 7px;
   background: var(--panel);
+}
+
+.attention-open {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
   text-align: left;
   cursor: pointer;
 }
@@ -429,6 +440,29 @@ kbd {
 .attention-project {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.attention-detail code,
+.ask-text code {
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--hover);
+  font-family: var(--font-mono);
+  font-size: 0.94em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+.perm-acts {
+  display: flex;
+  flex: none;
+  gap: 6px;
+}
+
+.perm-acts[data-small='true'] .btn {
+  height: 26px;
+  padding: 0 10px;
+  font-size: 12px;
 }
 
 .attention-detail {
@@ -1209,6 +1243,33 @@ kbd {
 .ended-bar[data-compact='true'] .btn {
   height: 26px;
   padding: 0 8px;
+  font-size: 12px;
+}
+
+/* A grid cell blocked on the user: what it asks, and the answer when AgentHub can give it. */
+.ask-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 5px 5px 5px 12px;
+  border-top: 1px solid var(--hl);
+  background: var(--hl-soft);
+  font-size: 12.5px;
+}
+
+.ask-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ask-bar > .btn {
+  flex: none;
+  height: 26px;
+  padding: 0 10px;
   font-size: 12px;
 }
 

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { Session } from './session.ts';
 import { CONFIG_DIR, ProjectStore } from './projects.ts';
-import { activityFromHook, writeHookSettings } from './hooks.ts';
+import { PERMISSION_WAIT_S, activityFromHook, permissionAsk, permissionDecision, writeHookSettings } from './hooks.ts';
 import { SessionStore, hasTranscript } from './sessionStore.ts';
 import { isEffortLevel, isModelAlias, watchModel } from './models.ts';
 import type { LaunchChoices } from './session.ts';
@@ -203,6 +203,13 @@ const routes: [string, RegExp, Handler][] = [
     return { ok: true };
   }],
 
+  ['POST', /^\/api\/sessions\/([\w-]+)\/permission$/, async (req, _url, [id]) => {
+    const body = await readJson(req);
+    if (typeof body.id !== 'string' || typeof body.allow !== 'boolean') throw new HttpError(400, 'Expected { id, allow }');
+    if (!findSession(id).answerPermission(body.id, body.allow)) throw new HttpError(409, 'Already answered');
+    return { ok: true };
+  }],
+
   ['GET', /^\/api\/suggestions$/, () => claudeProjectSuggestions()],
   ['GET', /^\/api\/folders$/, (_req, url) => {
     const path = url.searchParams.get('path');
@@ -221,7 +228,11 @@ function reportingSession(req: http.IncomingMessage): Session | null {
   return session && sameSecret(token, session.token) ? session : null;
 }
 
-/** Called by Claude Code's HTTP hooks. Always answers 204 so it never alters Claude's decisions. */
+/**
+ * Called by Claude Code's HTTP hooks. Answers 204, which changes nothing, except
+ * for permission requests: those stay open until the user allows or denies them
+ * from AgentHub, or answers in the terminal (then 204 too).
+ */
 async function handleHook(req: http.IncomingMessage, res: http.ServerResponse) {
   const session = reportingSession(req);
   if (!session) return sendJson(res, 403, { error: 'Forbidden' });
@@ -231,7 +242,20 @@ async function handleHook(req: http.IncomingMessage, res: http.ServerResponse) {
   watchModel(payload, (model) => session.trackModel(model));
   const update = activityFromHook(payload);
   if (update) session.applyActivity(update);
-  res.writeHead(204).end();
+
+  const ask = payload?.hook_event_name === 'PermissionRequest' ? permissionAsk(payload, session.cwd) : null;
+  if (!ask || session.status !== 'running') return res.writeHead(204).end();
+  let timer: NodeJS.Timeout;
+  const id = session.holdPermission(ask, payload, (allow) => {
+    clearTimeout(timer);
+    if (res.writableEnded || res.destroyed) return;
+    if (allow === null) res.writeHead(204).end();
+    else sendJson(res, 200, permissionDecision(allow));
+  });
+  // Give up shortly before Claude Code does, so it gets a clean answer.
+  timer = setTimeout(() => session.releasePermissions((p) => p.id === id), (PERMISSION_WAIT_S - 5) * 1000);
+  // Claude Code drops the request once its own prompt is answered.
+  res.on('close', () => session.releasePermissions((p) => p.id === id));
 }
 
 /** Called by statusline.mjs each time Claude Code refreshes its status line. */

@@ -5,6 +5,7 @@ import { TerminalView } from './TerminalView';
 import { ConfirmButton } from './ui';
 import { StatusDot, statusLabel, statusOf, timeAgo } from './status';
 import { ModelPicker } from './ModelPicker';
+import { PermissionButtons, PermissionText } from './Permission';
 
 interface Props {
   session: SessionInfo;
@@ -111,6 +112,21 @@ export function SessionPane(props: Props) {
         fontSize={compact ? 12 : 13}
         autoFocus={!compact || active}
       />
+
+      {compact && statusOf(session) === 'waiting' && (
+        <div className="ask-bar">
+          <span className="ask-text" title={session.permission ? `${session.permission.verb} ${session.permission.target}` : (session.detail ?? undefined)}>
+            {session.permission ? <PermissionText permission={session.permission} /> : (session.detail ?? 'Needs your input')}
+          </span>
+          {session.permission ? (
+            <PermissionButtons session={session} small />
+          ) : (
+            <button className="btn btn-secondary" onClick={onMaximize}>
+              Answer in the terminal
+            </button>
+          )}
+        </div>
+      )}
 
       {(exited || paused) && (
         <div className="ended-bar" data-compact={compact}>

@@ -4,6 +4,7 @@ import type { Project, SessionInfo } from './api';
 import type { ThemePref } from './theme';
 import { ConfirmButton, Menu, RenameInput } from './ui';
 import { storage } from './storage';
+import { PermissionButtons, PermissionText } from './Permission';
 import { StatusDot, initials, needsAttention, statusLabel, statusOf } from './status';
 import type { NotifyState } from './notifications';
 
@@ -208,16 +209,31 @@ function Attention(props: {
       </div>
       <div className="attention">
         {list.map((s) => (
-          <button key={s.id} className="attention-row" data-selected={s.id === props.selectedId} onClick={() => props.onSelect(s)}>
-            <span className="attention-title">
-              {statusOf(s) === 'waiting' ? <span className="mark">Needs you</span> : <span className="mark" data-tone="done">Done</span>}
-              <b>{s.name}</b>
-              <span className="attention-project">· {projectName(s.projectId)}</span>
-            </span>
-            <span className="attention-detail">
-              {statusOf(s) === 'waiting' ? (s.detail ?? 'Needs your input') : (s.detail ?? 'Finished')}
-            </span>
-          </button>
+          <div key={s.id} className="attention-row" data-selected={s.id === props.selectedId}>
+            <button className="attention-open" onClick={() => props.onSelect(s)}>
+              <span className="attention-title">
+                {s.permission ? (
+                  <span className="mark">Permission</span>
+                ) : statusOf(s) === 'waiting' ? (
+                  <span className="mark">Needs you</span>
+                ) : (
+                  <span className="mark" data-tone="done">Done</span>
+                )}
+                <b>{s.name}</b>
+                <span className="attention-project">· {projectName(s.projectId)}</span>
+              </span>
+              <span className="attention-detail">
+                {s.permission ? (
+                  <PermissionText permission={s.permission} />
+                ) : statusOf(s) === 'waiting' ? (
+                  (s.detail ?? 'Needs your input')
+                ) : (
+                  (s.detail ?? 'Finished')
+                )}
+              </span>
+            </button>
+            <PermissionButtons session={s} small />
+          </div>
         ))}
       </div>
     </>
