@@ -1816,9 +1816,50 @@ kbd {
   display: flex;
   align-items: center;
   gap: 6px;
+  width: 100%;
+  padding: 2px 0;
+  border: 0;
+  background: none;
   color: var(--text-muted);
+  font: inherit;
   font-size: 12px;
   font-weight: 800;
+  text-align: left;
+  cursor: pointer;
+}
+
+.usage-head:hover {
+  color: var(--text);
+}
+
+.usage-head .chevron {
+  margin-left: auto;
+}
+
+.usage-sum {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+  color: var(--text);
+  font: 600 11.5px var(--font-mono);
+}
+
+.usage-sum i {
+  color: var(--text-faint);
+  font-style: normal;
+}
+
+.usage-sum + .chevron {
+  margin-left: 0;
+}
+
+.usage-sum [data-level='warn'] {
+  color: var(--warn);
+}
+
+.usage-sum [data-level='high'],
+.usage-sum [data-level='full'] {
+  color: var(--danger);
 }
 
 .usage-row {

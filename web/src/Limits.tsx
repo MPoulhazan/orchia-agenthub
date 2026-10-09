@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Gauge, X } from 'lucide-react';
+import { ChevronRight, Gauge, X } from 'lucide-react';
 import type { LimitWindow, RateLimits } from './api';
 import type { NotifyState } from './notifications';
 import { pageActive } from './notifications';
@@ -79,9 +79,34 @@ export function topLevel(limits: RateLimits | null): LimitLevel {
 
 // ---- Meters --------------------------------------------------------------------
 
+const FOLD_KEY = 'agenthub.usageFolded';
+
+/** Folded by the user, and the near-limit windows it was folded during (so they don't reopen it). */
+interface Fold {
+  collapsed: boolean;
+  keepClosed: string | null;
+}
+
+function useFold(): [Fold, (next: Fold) => void] {
+  const [fold, setFold] = useState<Fold>(() => {
+    try {
+      const saved = JSON.parse(storage.get(FOLD_KEY) ?? 'null');
+      return { collapsed: !!saved?.collapsed, keepClosed: saved?.keepClosed ?? null };
+    } catch {
+      return { collapsed: false, keepClosed: null };
+    }
+  });
+  const save = (next: Fold) => {
+    setFold(next);
+    storage.set(FOLD_KEY, JSON.stringify(next));
+  };
+  return [fold, save];
+}
+
 /** Two meters: full rows in the sidebar, stacked minis in the rail. Hidden when the plan reports no limits. */
 export function UsageMeters({ limits, compact }: { limits: RateLimits | null; compact?: boolean }) {
   const now = useNow();
+  const [fold, setFold] = useFold();
   if (!limits) return null;
   const rows = WINDOWS.map((w) => ({ ...w, win: current(limits[w.key], now) })).filter((r) => r.win);
 
@@ -106,13 +131,31 @@ export function UsageMeters({ limits, compact }: { limits: RateLimits | null; co
     );
   }
 
+  // Close to a limit, the meters open again, unless folded once more for these windows.
+  const nearSig = rows
+    .filter((r) => r.win!.usedPct >= 90)
+    .map((r) => `${r.key}@${r.win!.resetsAt}`)
+    .join(',');
+  const open = !fold.collapsed || (nearSig !== '' && fold.keepClosed !== nearSig);
+  const toggle = () => setFold(open ? { collapsed: true, keepClosed: nearSig || null } : { collapsed: false, keepClosed: null });
+
   return (
-    <div className="usage">
-      <div className="usage-head">
+    <div className="usage" data-open={open}>
+      <button className="usage-head" aria-expanded={open} onClick={toggle} title={open ? 'Collapse' : 'Expand'}>
         <Gauge size={12} />
         <span>Plan usage</span>
-      </div>
-      {rows.map(({ key, label, win }) => {
+        {!open && (
+          <span className="usage-sum">
+            {rows.map(({ key, short, win }) => (
+              <span key={key} data-level={levelOf(win!.usedPct)} title={`Resets ${resetText(win!.resetsAt, now)}`}>
+                <i>{short}</i> {win!.usedPct}%
+              </span>
+            ))}
+          </span>
+        )}
+        <ChevronRight size={13} className={`chevron ${open ? 'is-open' : ''}`} />
+      </button>
+      {open && rows.map(({ key, label, win }) => {
         const level = levelOf(win!.usedPct);
         return (
           <div key={key} className="usage-row" data-level={level} title={`Resets ${resetText(win!.resetsAt, now)}`}>
