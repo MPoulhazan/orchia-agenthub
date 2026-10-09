@@ -101,6 +101,17 @@ export const api = {
   answerPermission: (id: string, permissionId: string, allow: boolean) =>
     request(`/api/sessions/${id}/permission`, 'POST', { id: permissionId, allow }),
   inspect: (id: string) => request<Inspection>(`/api/sessions/${id}/inspect`),
+  /** Saves an image for the session's Claude and returns where it went. */
+  pasteImage: async (id: string, image: Blob) => {
+    const res = await fetch(`/api/sessions/${id}/paste`, {
+      method: 'POST',
+      headers: { 'content-type': image.type },
+      body: image,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
+    return data as { path: string };
+  },
 
   suggestions: () => request<Suggestion[]>('/api/suggestions'),
   /** No path: home folder. Empty path: drive list. */

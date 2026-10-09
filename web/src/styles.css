@@ -2042,3 +2042,36 @@ kbd {
     transform: translateY(6px);
   }
 }
+
+/* ---- Images pasted or dropped on a terminal ------------------------------------ */
+
+.terminal-frame {
+  position: relative;
+}
+
+.terminal-drop {
+  position: absolute;
+  inset: 6px;
+  display: grid;
+  place-items: center;
+  border: 2px dashed var(--focus);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel) 82%, transparent);
+  color: var(--text);
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.terminal-notice {
+  position: absolute;
+  right: 14px;
+  bottom: 12px;
+  max-width: 70%;
+  padding: 7px 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--raised);
+  box-shadow: var(--shadow);
+  color: var(--danger);
+  font-size: 12.5px;
+}

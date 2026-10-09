@@ -12,6 +12,7 @@ import { isEffortLevel, isModelAlias, watchModel } from './models.ts';
 import type { LaunchChoices } from './session.ts';
 import { claudeProjectSuggestions, homeFolder, listFolder } from './folders.ts';
 import { gitSummary, limitsFromStatusLine, type RateLimits } from './inspector.ts';
+import { MAX_PASTE_BYTES, isPasteType, savePaste, startPasteCleanup } from './pastes.ts';
 
 const HOST = '127.0.0.1';
 const PORT = Number(process.env.AGENTHUB_PORT ?? 4317);
@@ -22,6 +23,7 @@ const projects = new ProjectStore();
 const hookSettings = writeHookSettings(CONFIG_DIR, PORT);
 const sessions = new Map<string, Session>();
 const sessionStore = new SessionStore(CONFIG_DIR);
+startPasteCleanup();
 
 // ---- Live state -------------------------------------------------------------
 // Every client keeps one events socket open and receives the whole state on
@@ -133,6 +135,18 @@ async function readJson(req: http.IncomingMessage): Promise<any> {
   return raw ? JSON.parse(raw) : {};
 }
 
+/** A raw request body, refused past `max` bytes. */
+async function readBody(req: http.IncomingMessage, max: number): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > max) throw new HttpError(413, `Too large (max ${Math.round(max / 1024 / 1024)} MB)`);
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
 function findSession(id: string): Session {
   const session = sessions.get(id);
   if (!session) throw new HttpError(404, 'Session not found');
@@ -196,6 +210,13 @@ const routes: [string, RegExp, Handler][] = [
     const body = await readJson(req);
     session.restart({ fresh: body.fresh === true, hasTranscript: hasTranscript(session.claudeSessionId) });
     return { ok: true };
+  }],
+  // An image pasted or dropped on the terminal: saved for Claude Code, which gets its path.
+  ['POST', /^\/api\/sessions\/([\w-]+)\/paste$/, async (req, _url, [id]) => {
+    findSession(id);
+    const type = String(req.headers['content-type'] ?? '');
+    if (!isPasteType(type)) throw new HttpError(415, 'Only PNG, JPEG, GIF and WebP images can be pasted');
+    return { path: savePaste(await readBody(req, MAX_PASTE_BYTES), type) };
   }],
   ['GET', /^\/api\/sessions\/([\w-]+)\/inspect$/, async (_req, _url, [id]) => {
     const session = findSession(id);
