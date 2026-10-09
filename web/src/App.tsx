@@ -8,6 +8,7 @@ import { Rail, Sidebar, type View } from './Sidebar';
 import { CommandPalette, type PaletteMode } from './CommandPalette';
 import { SessionPane } from './SessionPane';
 import { SessionTabs } from './SessionTabs';
+import { Inspector } from './Inspector';
 import { needsAttention, timeAgo } from './status';
 import { pageActive, useNotifications } from './notifications';
 
@@ -16,6 +17,7 @@ const SIDEBAR_KEY = 'agenthub.sidebar';
 const VIEW_KEY = 'agenthub.view';
 const GRID_KEY = 'agenthub.grid';
 const LAYOUT_KEY = 'agenthub.gridLayout';
+const INSPECTOR_KEY = 'agenthub.inspector';
 type GridLayout = '2x2' | '3x2';
 const GRID_CAPACITY: Record<GridLayout, number> = { '2x2': 4, '3x2': 6 };
 
@@ -38,6 +40,7 @@ export function App() {
   const [layout, setLayoutState] = useState<GridLayout>(() => (storage.get(LAYOUT_KEY) === '3x2' ? '3x2' : '2x2'));
   // 3×2 needs the width, so the sidebar folds to the rail unless asked back for this time.
   const [wideSidebar, setWideSidebar] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(() => storage.get(INSPECTOR_KEY) !== 'closed');
   const [palette, setPalette] = useState<PaletteMode | null>(null);
   const [focusKey, setFocusKey] = useState(0);
   const pendingId = useRef<string | null>(null);
@@ -187,6 +190,14 @@ export function App() {
     });
   };
 
+  const toggleInspector = () => {
+    setInspectorOpen((isOpen) => {
+      storage.set(INSPECTOR_KEY, isOpen ? 'closed' : 'open');
+      return !isOpen;
+    });
+    refocus();
+  };
+
   async function newSession(project: Project) {
     const session = await api.createSession(project.id);
     pendingId.current = session.id;
@@ -222,6 +233,8 @@ export function App() {
       project ? newSession(project) : setPalette('root');
     } else if (alt && key === 'g') {
       setView(view === 'grid' ? 'focus' : 'grid');
+    } else if (alt && key === 'i' && view === 'focus') {
+      toggleInspector();
     } else if (alt && /^Digit[1-9]$/.test(e.code)) {
       const target = sessions[Number(e.code.slice(5)) - 1];
       if (target) open(target.id);
@@ -331,25 +344,30 @@ export function App() {
           )}
           </div>
         ) : selected ? (
-          <div className="focus-view">
-            <SessionTabs
-              sessions={sessions.filter((s) => s.projectId === selected.projectId)}
-              selectedId={selected.id}
-              onSelect={(s) => open(s.id)}
-              onClose={(s) => api.closeSession(s.id)}
-              onRename={(s, name) => api.renameSession(s.id, name)}
-              onNew={() => selectedProject && newSession(selectedProject)}
-            />
-            <SessionPane
-              tabbed
-              session={selected}
-              project={selectedProject}
-              theme={terminalTheme}
-              focusKey={focusKey}
-              inGrid={gridIds.includes(selected.id)}
-              onToggleGrid={() => toggleGrid(selected.id)}
-            />
-          </div>
+          <>
+            <div className="focus-view">
+              <SessionTabs
+                sessions={sessions.filter((s) => s.projectId === selected.projectId)}
+                selectedId={selected.id}
+                onSelect={(s) => open(s.id)}
+                onClose={(s) => api.closeSession(s.id)}
+                onRename={(s, name) => api.renameSession(s.id, name)}
+                onNew={() => selectedProject && newSession(selectedProject)}
+              />
+              <SessionPane
+                tabbed
+                session={selected}
+                project={selectedProject}
+                theme={terminalTheme}
+                focusKey={focusKey}
+                inGrid={gridIds.includes(selected.id)}
+                onToggleGrid={() => toggleGrid(selected.id)}
+                inspectorOpen={inspectorOpen}
+                onToggleInspector={toggleInspector}
+              />
+            </div>
+            {inspectorOpen && <Inspector session={selected} onClose={toggleInspector} />}
+          </>
         ) : (
           projects.length ? (
             <EmptyState projects={projects} onOpenPalette={() => setPalette('root')} onOpenProject={openProject} />
@@ -372,6 +390,7 @@ export function App() {
           onSetTheme={theme.setPref}
           onSetView={setView}
           onToggleSidebar={toggleSidebar}
+          onToggleInspector={view === 'focus' && selected ? toggleInspector : undefined}
         />
       )}
     </div>
@@ -461,6 +480,9 @@ function Welcome(props: { onOpenPalette: () => void; onAddPath: (path: string) =
           </span>
           <span>
             <kbd>Alt G</kbd> focus or grid
+          </span>
+          <span>
+            <kbd>Alt I</kbd> inspector
           </span>
           <span>
             <kbd>Alt 1…9</kbd> jump to a session

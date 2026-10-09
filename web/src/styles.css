@@ -1539,3 +1539,192 @@ kbd {
 .palette-footer kbd {
   margin-right: 3px;
 }
+
+/* ---- Inspector ------------------------------------------------------------- */
+/* Sits on the desk next to the pane, not on a sheet of its own. */
+
+.inspector {
+  flex: none;
+  width: 288px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 2px 6px 8px 18px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.insp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 32px;
+  margin-bottom: -6px;
+  font-weight: 800;
+}
+
+.insp-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.insp-block h3 {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-weight: 800;
+}
+
+.insp-block h3 > span {
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.insp-meter {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.insp-meter i {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--focus);
+}
+
+.insp-meter[data-level='high'] i {
+  background: var(--danger);
+}
+
+.insp-note,
+.insp-empty {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: 12.5px;
+}
+
+.insp-kv {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 10px;
+  margin: 0;
+}
+
+.insp-kv dt {
+  color: var(--text-muted);
+}
+
+.insp-kv dt[title] {
+  cursor: help;
+}
+
+.insp-kv dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.insp-plan {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.insp-plan li {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  line-height: 1.35;
+}
+
+.insp-box {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  margin-top: 1px;
+  border: 1.5px solid var(--text-faint);
+  border-radius: 3px;
+}
+
+.insp-plan li[data-status='completed'] {
+  color: var(--text-faint);
+}
+
+.insp-plan li[data-status='completed'] .insp-box {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--panel);
+}
+
+.insp-plan li[data-status='in_progress'] {
+  font-weight: 800;
+}
+
+.insp-plan li[data-status='in_progress'] .insp-box {
+  border-color: var(--waiting);
+  background: var(--hl);
+}
+
+.insp-files {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font: 12.5px var(--font-mono);
+}
+
+.insp-files > div {
+  display: flex;
+  gap: 8px;
+}
+
+.insp-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.insp-add {
+  color: var(--accent);
+}
+
+.insp-del {
+  color: var(--danger);
+}
+
+.insp-new {
+  color: var(--text-faint);
+}
+
+.insp-branch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  font: 12.5px var(--font-mono);
+}
+
+.insp-branch small {
+  flex: none;
+  color: var(--text-faint);
+  font-family: var(--font-ui);
+  font-size: 12px;
+}

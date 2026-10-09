@@ -3,6 +3,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import type { IPty } from '@lydell/node-pty';
 import type { Activity, ActivityUpdate } from './hooks.ts';
+import { nextPlan, usageFromStatusLine, userStatusLine, type PlanItem, type Usage } from './inspector.ts';
 
 // These packages ship CommonJS entry points; load them through require.
 const require = createRequire(import.meta.url);
@@ -51,6 +52,9 @@ export interface SessionRecord extends Partial<LaunchChoices> {
   claudeSessionId: string;
   exited: boolean;
   model?: string | null;
+  usage?: Usage | null;
+  plan?: PlanItem[];
+  turns?: number;
 }
 
 interface SessionOptions extends Partial<LaunchChoices> {
@@ -88,6 +92,10 @@ export class Session extends EventEmitter {
   model: string | null;
   modelChoice: string | null;
   effortChoice: string | null;
+  /** Inspector data for the current conversation. */
+  usage: Usage | null;
+  plan: PlanItem[];
+  turns: number;
   /** Shared with the hooks so only this session's claude can report its activity. */
   readonly token = randomBytes(24).toString('hex');
 
@@ -110,6 +118,9 @@ export class Session extends EventEmitter {
     this.model = restore?.model ?? null;
     this.modelChoice = restore?.modelChoice ?? opts.modelChoice ?? null;
     this.effortChoice = restore?.effortChoice ?? opts.effortChoice ?? null;
+    this.usage = restore?.usage ?? null;
+    this.plan = restore?.plan ?? [];
+    this.turns = restore?.turns ?? 0;
     this.hookSettings = opts.hookSettings;
     this.cols = opts.cols ?? 120;
     this.rows = opts.rows ?? 32;
@@ -155,6 +166,7 @@ export class Session extends EventEmitter {
         COLORTERM: 'truecolor',
         AGENTHUB_SESSION_ID: this.id,
         AGENTHUB_TOKEN: this.token,
+        AGENTHUB_USER_STATUSLINE: userStatusLine(this.cwd) ?? '',
       },
     });
     this.proc = proc;
@@ -199,7 +211,10 @@ export class Session extends EventEmitter {
    * starts a new one. A session that never got a prompt has no transcript to resume.
    */
   restart({ fresh, hasTranscript }: { fresh: boolean; hasTranscript: boolean }) {
-    if (fresh) this.claudeSessionId = randomUUID();
+    if (fresh) {
+      this.claudeSessionId = randomUUID();
+      this.forgetConversation();
+    }
     this.relaunch(!fresh && hasTranscript);
   }
 
@@ -221,7 +236,26 @@ export class Session extends EventEmitter {
   trackClaudeSession(id: unknown) {
     if (typeof id !== 'string' || !id || id === this.claudeSessionId) return;
     this.claudeSessionId = id;
+    this.forgetConversation();
     this.emit('change');
+  }
+
+  private forgetConversation() {
+    this.usage = null;
+    this.plan = [];
+    this.turns = 0;
+  }
+
+  /** Cost and context, reported by the status line relay. Not broadcast: the inspector asks for them. */
+  trackStatusLine(payload: unknown) {
+    this.usage = usageFromStatusLine(payload);
+  }
+
+  /** Turns and plan, from the hooks. */
+  trackHook(payload: any) {
+    if (payload?.hook_event_name === 'UserPromptSubmit') this.turns++;
+    const plan = nextPlan(this.plan, payload);
+    if (plan) this.plan = plan;
   }
 
   applyActivity({ activity, detail }: ActivityUpdate) {
@@ -312,6 +346,9 @@ export class Session extends EventEmitter {
       model: this.model,
       modelChoice: this.modelChoice,
       effortChoice: this.effortChoice,
+      usage: this.usage,
+      plan: this.plan,
+      turns: this.turns,
     };
   }
 }

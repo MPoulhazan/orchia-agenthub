@@ -22,6 +22,30 @@ export interface SessionInfo {
   effortChoice: string | null;
 }
 
+export interface Inspection {
+  /** From Claude Code's status line; null until it first reports. */
+  usage: {
+    costUsd: number | null;
+    contextUsed: number | null;
+    contextSize: number | null;
+    apiMs: number | null;
+    linesAdded: number | null;
+    linesRemoved: number | null;
+  } | null;
+  plan: { id: string; text: string; status: 'pending' | 'in_progress' | 'completed' }[];
+  turns: number;
+  /** null outside a git repository. */
+  git: {
+    branch: string | null;
+    ahead: number | null;
+    behind: number | null;
+    files: { path: string; added: number | null; removed: number | null; isNew: boolean }[];
+    fileCount: number;
+    added: number;
+    removed: number;
+  } | null;
+}
+
 export interface Suggestion {
   name: string;
   path: string;
@@ -60,6 +84,7 @@ export const api = {
   /** Keeps the conversation unless `fresh`. */
   restartSession: (id: string, fresh = false) => request(`/api/sessions/${id}/restart`, 'POST', { fresh }),
   closeSession: (id: string) => request(`/api/sessions/${id}`, 'DELETE'),
+  inspect: (id: string) => request<Inspection>(`/api/sessions/${id}/inspect`),
 
   suggestions: () => request<Suggestion[]>('/api/suggestions'),
   /** No path: home folder. Empty path: drive list. */

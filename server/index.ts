@@ -11,6 +11,7 @@ import { SessionStore, hasTranscript } from './sessionStore.ts';
 import { isEffortLevel, isModelAlias, watchModel } from './models.ts';
 import type { LaunchChoices } from './session.ts';
 import { claudeProjectSuggestions, homeFolder, listFolder } from './folders.ts';
+import { gitSummary } from './inspector.ts';
 
 const HOST = '127.0.0.1';
 const PORT = Number(process.env.AGENTHUB_PORT ?? 4317);
@@ -192,6 +193,10 @@ const routes: [string, RegExp, Handler][] = [
     session.restart({ fresh: body.fresh === true, hasTranscript: hasTranscript(session.claudeSessionId) });
     return { ok: true };
   }],
+  ['GET', /^\/api\/sessions\/([\w-]+)\/inspect$/, async (_req, _url, [id]) => {
+    const session = findSession(id);
+    return { usage: session.usage, plan: session.plan, turns: session.turns, git: await gitSummary(session.cwd) };
+  }],
   ['DELETE', /^\/api\/sessions\/([\w-]+)$/, (_req, _url, [id]) => {
     closeSession(findSession(id));
     broadcast();
@@ -209,21 +214,37 @@ const routes: [string, RegExp, Handler][] = [
   }],
 ];
 
-/** Called by Claude Code's HTTP hooks. Always answers 204 so it never alters Claude's decisions. */
-async function handleHook(req: http.IncomingMessage, res: http.ServerResponse) {
+/** The session a hook or the status line relay reports for, checked against its token. */
+function reportingSession(req: http.IncomingMessage): Session | null {
   const session = sessions.get(String(req.headers['x-agenthub-session'] ?? ''));
   const token = String(req.headers.authorization ?? '').replace(/^Bearer /, '');
-  if (!session || !sameSecret(token, session.token)) return sendJson(res, 403, { error: 'Forbidden' });
+  return session && sameSecret(token, session.token) ? session : null;
+}
+
+/** Called by Claude Code's HTTP hooks. Always answers 204 so it never alters Claude's decisions. */
+async function handleHook(req: http.IncomingMessage, res: http.ServerResponse) {
+  const session = reportingSession(req);
+  if (!session) return sendJson(res, 403, { error: 'Forbidden' });
   const payload = await readJson(req);
   session.trackClaudeSession(payload?.session_id);
+  session.trackHook(payload);
   watchModel(payload, (model) => session.trackModel(model));
   const update = activityFromHook(payload);
   if (update) session.applyActivity(update);
   res.writeHead(204).end();
 }
 
+/** Called by statusline.mjs each time Claude Code refreshes its status line. */
+async function handleStatusLine(req: http.IncomingMessage, res: http.ServerResponse) {
+  const session = reportingSession(req);
+  if (!session) return sendJson(res, 403, { error: 'Forbidden' });
+  session.trackStatusLine(await readJson(req));
+  res.writeHead(204).end();
+}
+
 async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, url: URL) {
   if (url.pathname === '/api/hook' && req.method === 'POST') return handleHook(req, res);
+  if (url.pathname === '/api/statusline' && req.method === 'POST') return handleStatusLine(req, res);
   for (const [method, pattern, handler] of routes) {
     const match = url.pathname.match(pattern);
     if (match && req.method === method) return sendJson(res, 200, await handler(req, url, match.slice(1)));

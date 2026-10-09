@@ -1,5 +1,5 @@
 import type { ITheme } from '@xterm/xterm';
-import { LayoutGrid, Maximize2, RotateCcw, X } from 'lucide-react';
+import { LayoutGrid, Maximize2, PanelRight, RotateCcw, X } from 'lucide-react';
 import { api, type Project, type SessionInfo } from './api';
 import { TerminalView } from './TerminalView';
 import { ConfirmButton } from './ui';
@@ -20,9 +20,13 @@ interface Props {
   onActivate?: () => void;
   onMaximize?: () => void;
   onToggleGrid?: () => void;
+  /** Focus view only: the inspector button. */
+  inspectorOpen?: boolean;
+  onToggleInspector?: () => void;
 }
 
-export function SessionPane({ session, project, theme, compact, tabbed, active, focusKey, inGrid, onActivate, onMaximize, onToggleGrid }: Props) {
+export function SessionPane(props: Props) {
+  const { session, project, theme, compact, tabbed, active, focusKey, inGrid, onActivate, onMaximize, onToggleGrid } = props;
   const exited = session.status === 'exited';
   const paused = session.status === 'suspended';
 
@@ -72,6 +76,16 @@ export function SessionPane({ session, project, theme, compact, tabbed, active, 
             >
               <LayoutGrid size={14} />
             </button>
+            {props.onToggleInspector && (
+              <button
+                className="icon-btn"
+                title={props.inspectorOpen ? 'Hide inspector (Alt I)' : 'Show inspector (Alt I)'}
+                data-on={props.inspectorOpen}
+                onClick={props.onToggleInspector}
+              >
+                <PanelRight size={14} />
+              </button>
+            )}
             {tabbed ? null : exited ? (
               <button className="icon-btn" title="Close" onClick={() => api.closeSession(session.id)}>
                 <X size={15} />

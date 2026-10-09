@@ -10,6 +10,7 @@ import {
   Monitor,
   Moon,
   PanelLeft,
+  PanelRight,
   Plus,
   Square,
   Sun,
@@ -43,6 +44,8 @@ interface Props {
   onSetTheme: (pref: ThemePref) => void;
   onSetView: (view: View) => void;
   onToggleSidebar: () => void;
+  /** Only in the focus view, with a session shown. */
+  onToggleInspector?: () => void;
 }
 
 const ICON = 15;
@@ -141,6 +144,9 @@ export function CommandPalette(props: Props) {
         ? { id: 'view', group: 'Actions', label: 'Switch to focus view', icon: <Square size={ICON} />, run: () => props.onSetView('focus') }
         : { id: 'view', group: 'Actions', label: 'Switch to grid view', icon: <LayoutGrid size={ICON} />, run: () => props.onSetView('grid') },
       { id: 'sidebar', group: 'Actions', label: 'Toggle sidebar', icon: <PanelLeft size={ICON} />, run: () => props.onToggleSidebar() },
+      ...(props.onToggleInspector
+        ? [{ id: 'inspector', group: 'Actions', label: 'Show or hide the inspector', icon: <PanelRight size={ICON} />, run: () => props.onToggleInspector!() }]
+        : []),
       { id: 'theme-system', group: 'Actions', label: 'Theme: System', icon: <Monitor size={ICON} />, run: () => props.onSetTheme('system') },
       { id: 'theme-light', group: 'Actions', label: 'Theme: Light', icon: <Sun size={ICON} />, run: () => props.onSetTheme('light') },
       { id: 'theme-dark', group: 'Actions', label: 'Theme: Dark', icon: <Moon size={ICON} />, run: () => props.onSetTheme('dark') },
@@ -150,7 +156,7 @@ export function CommandPalette(props: Props) {
       out.unshift({ id: 'add-path', group: 'Add', label: `Add ${q}`, icon: <FolderPlus size={ICON} />, run: () => add(q) });
     }
     return out;
-  }, [mode, query, listing, projects, suggestions, currentProject, props.view]);
+  }, [mode, query, listing, projects, suggestions, currentProject, props.view, !props.onToggleInspector]);
 
   useEffect(() => setActive(0), [query]);
 

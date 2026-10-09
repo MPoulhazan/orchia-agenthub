@@ -8,9 +8,8 @@ One dashboard for all your Claude Code sessions, organized by project.
 </picture>
 
 > [!NOTE]
-> These screenshots show the upcoming **Établi** theme. A few things in them are not
-> built yet: answering permissions from the inbox or the grid, the session inspector
-> (context, cost, plan, files, branch), session tabs and the grid layout picker.
+> These screenshots are mockups of the **Établi** theme. One thing in them is not
+> built yet: answering permissions from the inbox or the grid.
 
 ## A look around
 
@@ -101,6 +100,7 @@ restart button keeps the conversation; "New conversation" starts a fresh one.
 | `Ctrl K`      | Search projects, folders and actions   |
 | `Alt N`       | New session in the current project     |
 | `Alt G`       | Switch between focus and grid view     |
+| `Alt I`       | Show or hide the inspector (focus view) |
 | `Alt 1` … `9` | Jump to a session (sidebar order)      |
 | `Shift Enter` | New line in Claude's prompt            |
 | `Ctrl C`      | Copy when text is selected, else interrupt |
@@ -136,6 +136,22 @@ Changing them relaunches that session with `--resume --model … --effort …`: 
 conversation is kept and your global Claude settings are not touched (unlike
 typing `/model`, which saves a new default). An `/effort` typed inside Claude is
 not reflected in the chip.
+
+## Inspector
+
+The panel on the right of the focus view (`Alt I`) shows, for the session on
+screen:
+
+- **Context** used and **cost so far**, as Claude Code itself estimates them. Claude
+  Code only gives these to its status line, so the injected settings also set a
+  status line command, `server/statusline.mjs`, which passes them to AgentHub and
+  then runs your own status line (from your user or project settings) unchanged.
+  Side effect: with any status line set, Claude Code hides some footer hints such
+  as "esc to interrupt".
+- **Plan**, when Claude keeps one with its task tools (`TaskCreate`/`TaskUpdate`,
+  or `TodoWrite`). Recent models don't use them by default, so it is often absent.
+- **Uncommitted changes** and **branch** of the project folder, from `git status`
+  and `git diff HEAD`. Every session in the same folder sees the same changes.
 
 ## Environment
 

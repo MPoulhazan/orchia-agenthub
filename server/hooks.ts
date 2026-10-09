@@ -1,11 +1,15 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /**
  * Claude Code reports what it is doing through HTTP hooks injected with
  * `--settings`. They add to the user's own hooks instead of replacing them.
  * Each session gets its id and a secret token through environment variables,
  * which Claude Code interpolates into the request headers.
+ *
+ * The status line is the only place Claude Code gives out the session cost and
+ * context window, so a relay script reports them (see statusline.mjs).
  */
 
 export type Activity = 'starting' | 'working' | 'waiting' | 'idle';
@@ -25,6 +29,9 @@ const WAITING_NOTIFICATIONS = new Set([
   'elicitation_url_dialog',
   'agent_needs_input',
 ]);
+
+// Forward slashes: on Windows, Claude Code runs the command through Git Bash.
+const STATUS_LINE_SCRIPT = fileURLToPath(new URL('./statusline.mjs', import.meta.url)).replace(/\\/g, '/');
 
 export function writeHookSettings(dir: string, port: number): string {
   const hook = {
@@ -50,6 +57,7 @@ export function writeHookSettings(dir: string, port: number): string {
       StopFailure: on(),
       PostModelSwitch: on(),
     },
+    statusLine: { type: 'command', command: `node "${STATUS_LINE_SCRIPT}" ${port}` },
   };
 
   mkdirSync(dir, { recursive: true });
