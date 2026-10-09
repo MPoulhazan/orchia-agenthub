@@ -2,6 +2,82 @@
 
 One dashboard for all your Claude Code sessions, organized by project.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/design/focus-dark.png">
+  <img alt="Focus view: a session waits for permission, with the inbox on the left and the session inspector on the right" src="docs/design/focus-light.png">
+</picture>
+
+> [!NOTE]
+> These screenshots show the upcoming **Établi** theme. A few things in them are not
+> built yet: answering permissions from the inbox or the grid, the session inspector
+> (context, cost, plan, files, branch), session tabs and the grid layout picker.
+
+## A look around
+
+<table>
+  <tr>
+    <td width="50%">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/design/grid4-dark.png">
+        <img alt="Grid view with four sessions" src="docs/design/grid4-light.png">
+      </picture>
+      <p><b>Grid, 2 × 2.</b> Every session shows its state in words. Allow or deny a request without leaving the grid.</p>
+    </td>
+    <td width="50%">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/design/grid6-dark.png">
+        <img alt="Grid view with six sessions and the sidebar collapsed" src="docs/design/grid6-light.png">
+      </picture>
+      <p><b>Grid, 3 × 2.</b> The sidebar folds into a rail and keeps the count of sessions that need you.</p>
+    </td>
+  </tr>
+  <tr>
+    <td>
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/design/palette-dark.png">
+        <img alt="Search palette listing sessions that need you, then other sessions and actions" src="docs/design/palette-light.png">
+      </picture>
+      <p><b>Search, <kbd>Ctrl K</kbd>.</b> Sessions that need you come first. Every action shows its shortcut.</p>
+    </td>
+    <td>
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/design/add-dark.png">
+        <img alt="Folder browser to add a project" src="docs/design/add-light.png">
+      </picture>
+      <p><b>Add a project.</b> Folders you already used with Claude Code are listed first.</p>
+    </td>
+  </tr>
+  <tr>
+    <td>
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/design/model-dark.png">
+        <img alt="Model and effort picker" src="docs/design/model-light.png">
+      </picture>
+      <p><b>Model and effort.</b> Changed per session. The conversation is kept.</p>
+    </td>
+    <td>
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/design/ended-dark.png">
+        <img alt="A session whose Claude process has ended, with restart options" src="docs/design/ended-light.png">
+      </picture>
+      <p><b>Session ended.</b> Restart and pick the conversation up where it stopped.</p>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/design/welcome-dark.png">
+        <img alt="First launch screen suggesting folders to add" src="docs/design/welcome-light.png">
+      </picture>
+      <p><b>First launch.</b> Add a project in one click from the folders Claude Code already knows.</p>
+    </td>
+  </tr>
+</table>
+
+The screenshots come from [docs/design/mockups.html](docs/design/mockups.html). Open it
+in a browser to page through the screens, or add `#grid4-dark` (any screen id and
+`light` or `dark`) to the URL to render one screen at full size.
+
 ## Run
 
 ```sh

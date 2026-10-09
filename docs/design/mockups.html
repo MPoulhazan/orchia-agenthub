@@ -1,0 +1,688 @@
+<title>AgentHub Établi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400..800&family=Atkinson+Hyperlegible+Mono:wght@400..700&display=swap">
+<style>
+/* Layout: screen picker on top, one fixed 1360x840 app frame scaled to fit, design notes underneath. */
+:root{
+  --pg-bg:#F2F3F5; --pg-card:#FFFFFF; --pg-ink:#15181C; --pg-muted:#5B636D; --pg-rule:#D8DCE1; --pg-accent:#2446C7;
+  --pg-font:'Atkinson Hyperlegible Next', 'Segoe UI', system-ui, sans-serif;
+  --pg-mono:'Atkinson Hyperlegible Mono', ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --pg-bg:#101215; --pg-card:#181B1F; --pg-ink:#E6E8EB; --pg-muted:#98A0AA; --pg-rule:#2A2E34; --pg-accent:#93A6FF; color-scheme:dark; }
+}
+:root[data-theme="dark"]{ --pg-bg:#101215; --pg-card:#181B1F; --pg-ink:#E6E8EB; --pg-muted:#98A0AA; --pg-rule:#2A2E34; --pg-accent:#93A6FF; color-scheme:dark; }
+
+*{box-sizing:border-box}
+body{background:var(--pg-bg);color:var(--pg-ink);font:15px/1.55 var(--pg-font);padding:0 20px}
+.page{max-width:1400px;margin:0 auto;padding-block:26px 56px;display:flex;flex-direction:column;gap:18px}
+.head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:end;gap:14px}
+.head h1{margin:0;font-size:26px;letter-spacing:-.01em}
+.head p{margin:2px 0 0;color:var(--pg-muted);max-width:70ch}
+.picker{display:flex;flex-wrap:wrap;gap:6px}
+.picker button{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:6px;border:1px solid var(--pg-rule);background:var(--pg-card);font-size:14px;font-weight:600;color:var(--pg-muted)}
+.picker button span{font:500 11.5px var(--pg-mono);opacity:.7}
+.picker button[aria-selected="true"]{background:var(--pg-ink);color:var(--pg-bg);border-color:var(--pg-ink)}
+.picker button:focus-visible,.seg button:focus-visible,.nav button:focus-visible{outline:2px solid var(--pg-accent);outline-offset:2px}
+.bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.bar h2{margin:0;font-size:19px}
+.bar .r{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.seg{display:inline-flex;border:1px solid var(--pg-rule);border-radius:6px;overflow:hidden;background:var(--pg-card)}
+.seg button{all:unset;cursor:pointer;padding:5px 12px;font-size:13px;color:var(--pg-muted)}
+.seg button[aria-pressed="true"]{background:var(--pg-ink);color:var(--pg-bg)}
+.nav{display:flex;gap:4px}
+.nav button{all:unset;cursor:pointer;width:32px;height:30px;display:grid;place-items:center;border:1px solid var(--pg-rule);border-radius:6px;background:var(--pg-card);color:var(--pg-ink)}
+.count{font:13px var(--pg-mono);color:var(--pg-muted)}
+.stage{position:relative;overflow:hidden;border-radius:10px;border:1px solid var(--pg-rule);box-shadow:0 18px 50px -26px rgba(10,20,40,.35)}
+.stage > .app{position:absolute;left:0;top:0;transform-origin:0 0}
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px 28px}
+.notes div{display:flex;flex-direction:column;gap:2px}
+.notes b{font-size:14.5px}
+.notes p{margin:0;color:var(--pg-muted);font-size:14px;max-width:62ch}
+.mock{font:600 11px var(--pg-mono);color:var(--pg-accent);letter-spacing:.04em;text-transform:uppercase}
+
+/* ================= APP · Établi ================= */
+.app{
+  --desk:#E9ECEF; --panel:#FFFFFF; --ink:#111418; --ink2:#535C66; --ink3:#87909A; --rule:#D9DDE2; --rule2:#C6CCD3; --hover:#F1F3F5; --sel:#E6EBF8;
+  --acc:#2446C7; --hl:#FFE24D; --hl-soft:#FFF6C2; --hl-edge:#E2BE00; --hl-ink:#3A3000; --work:#18865A; --err:#C2362F; --idle:#B5BCC4; --scrim:rgba(17,20,24,.28);
+  --shadow:0 24px 60px -18px rgba(17,20,24,.35);
+  --t-bg:#FFFFFF; --t-fg:#1A1E23; --t-dim:#7E8792; --t-add:#106A45; --t-add-bg:#E3F4EB; --t-del:#A92F28; --t-del-bg:#FCE8E6; --t-acc:#2446C7; --t-rule:#D2D7DD; --t-sel:#2446C7; --t-user-bg:#F0F2F5; --t-warn:#8A6A00;
+  width:1360px;height:840px;display:flex;overflow:hidden;position:relative;text-align:left;
+  font:13.5px/1.45 'Atkinson Hyperlegible Next', system-ui, sans-serif; color:var(--ink); background:var(--desk);
+}
+.app[data-mt="dark"]{
+  --desk:#0E1114; --panel:#161A1E; --ink:#E8EBEE; --ink2:#9AA3AE; --ink3:#66707B; --rule:#252B32; --rule2:#333B44; --hover:#1C2127; --sel:#1C2540;
+  --acc:#8DA2FF; --hl:#E9CD33; --hl-soft:#2E2A12; --hl-edge:#8C7A1C; --hl-ink:#1D1800; --work:#4FC58E; --err:#F07B72; --idle:#3B434C; --scrim:rgba(0,0,0,.55);
+  --shadow:0 24px 60px -18px rgba(0,0,0,.7);
+  --t-bg:#161A1E; --t-fg:#DCE1E6; --t-dim:#6E7884; --t-add:#7FD7AD; --t-add-bg:#16302A; --t-del:#F2A097; --t-del-bg:#3A1E1D; --t-acc:#8DA2FF; --t-rule:#2A3139; --t-sel:#8DA2FF; --t-user-bg:#1C2127; --t-warn:#E9CD33;
+}
+.app *{box-sizing:border-box}
+.app .mono{font-family:'Atkinson Hyperlegible Mono',ui-monospace,monospace}
+.ic{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.sp{flex:1}
+kbd.k{font:500 11px 'Atkinson Hyperlegible Mono',monospace;color:var(--ink2);border:1px solid var(--rule2);border-bottom-width:2px;border-radius:4px;padding:0 5px;line-height:16px}
+.btn{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:5px;font-weight:700;font-size:12.5px;border:1px solid var(--rule2);background:var(--panel);color:var(--ink);white-space:nowrap}
+.btn.pri{background:var(--ink);border-color:var(--ink);color:var(--panel)}
+.btn.lg{height:34px;padding:0 14px;font-size:14px;border-radius:6px}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--ink2)}
+.ib{display:grid;place-items:center;width:28px;height:28px;border-radius:5px;color:var(--ink2)}
+.ib.on{background:var(--panel);color:var(--ink);box-shadow:0 0 0 1px var(--rule)}
+
+.dot{width:8px;height:8px;border-radius:50%;background:var(--idle);flex:none}
+.dot.w{background:var(--work);box-shadow:0 0 0 3px color-mix(in srgb,var(--work) 18%,transparent)}
+.dot.a{background:var(--hl);box-shadow:inset 0 0 0 1.5px var(--hl-edge)}
+.dot.d{background:var(--acc)}
+.dot.p{background:transparent;box-shadow:inset 0 0 0 1.5px var(--ink3)}
+.dot.x{background:var(--rule2)}
+@media (prefers-reduced-motion:no-preference){ .dot.w{animation:breathe 1.8s ease-in-out infinite} @keyframes breathe{50%{opacity:.45}} }
+.mark{background:linear-gradient(transparent 10%,var(--hl) 10%,var(--hl) 90%,transparent 90%);color:var(--hl-ink);padding:0 4px;font-weight:800;font-size:11px;letter-spacing:.03em;border-radius:1px;white-space:nowrap}
+.mark.done{background:linear-gradient(transparent 10%,color-mix(in srgb,var(--acc) 20%,transparent) 10%,color-mix(in srgb,var(--acc) 20%,transparent) 90%,transparent 90%);color:var(--acc)}
+.sw{font-size:12px;font-weight:700;white-space:nowrap}
+.sw.w{color:var(--work)} .sw.d{color:var(--acc)} .sw.i,.sw.p,.sw.x{color:var(--ink3);font-weight:600}
+
+/* sidebar */
+.side{width:288px;flex:none;display:flex;flex-direction:column;gap:2px;padding:14px 12px 10px;border-right:1px solid var(--rule)}
+.brand{display:flex;align-items:center;gap:8px;padding:0 4px 12px;font-weight:800;font-size:15px}
+.glyph{display:grid;grid-template-columns:1fr 1fr;gap:2px;width:16px;height:16px;flex:none}
+.glyph i{background:var(--ink);border-radius:1px} .glyph i:nth-child(2){background:var(--hl)}
+.brand .vs{display:flex;gap:2px;padding:2px;border-radius:6px;background:color-mix(in srgb,var(--ink) 6%,transparent)}
+.brand .vs .ib{width:26px;height:24px}
+.search{display:flex;align-items:center;gap:8px;height:34px;padding:0 10px;border-radius:6px;background:var(--panel);border:1px solid var(--rule);color:var(--ink3);margin-bottom:10px}
+.search span{flex:1}
+.sec{display:flex;align-items:center;gap:8px;padding:8px 6px 6px;font-size:12px;font-weight:800;color:var(--ink2)}
+.sec .n{background:var(--hl);color:var(--hl-ink);padding:0 6px;border-radius:2px;font-weight:800}
+.sec .ib{width:22px;height:22px}
+.inbox{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
+.msg{display:flex;flex-direction:column;gap:4px;padding:9px 10px;border-radius:7px;background:var(--panel);border:1px solid var(--rule)}
+.msg.on{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}
+.msg .who{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink2);min-width:0}
+.msg .who b{color:var(--ink);white-space:nowrap}
+.msg .who .pj{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.msg .who time{margin-left:auto;font:11.5px 'Atkinson Hyperlegible Mono',monospace;color:var(--ink3);flex:none}
+.msg p{margin:0;font-size:13px;line-height:1.38}
+.msg code{font:12.5px 'Atkinson Hyperlegible Mono',monospace;background:var(--hover);padding:0 4px;border-radius:3px}
+.msg .acts{display:flex;gap:6px;margin-top:3px}
+.proj{display:flex;align-items:center;gap:6px;padding:7px 6px 3px;font-weight:800}
+.proj .ic{color:var(--ink3)}
+.proj small{margin-left:auto;color:var(--ink3);font-weight:400;font-size:12px}
+.sess{display:flex;align-items:center;gap:8px;height:28px;padding:0 8px 0 26px;border-radius:5px;color:var(--ink2)}
+.sess.on{background:var(--sel);color:var(--ink);font-weight:800}
+.sess .ic{color:var(--ink3);width:13px;height:13px}
+.sess .t{margin-left:auto;font:11.5px 'Atkinson Hyperlegible Mono',monospace;color:var(--ink3);font-weight:400}
+.empty-tree{margin:4px 6px;padding:12px;border:1px dashed var(--rule2);border-radius:7px;color:var(--ink2);font-size:13px}
+.side-foot{margin-top:auto;display:flex;align-items:center;gap:6px;color:var(--ink3);padding:8px 2px 0}
+.side-foot .tm{display:flex;gap:2px;padding:2px;border-radius:6px;background:color-mix(in srgb,var(--ink) 6%,transparent)}
+.side-foot .tm .ib{width:26px;height:24px}
+
+/* rail (collapsed sidebar) */
+.rail{width:60px;flex:none;display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 0 10px;border-right:1px solid var(--rule)}
+.rail .glyph{margin-bottom:10px}
+.rail .badge{position:relative}
+.rail .badge b{position:absolute;top:-2px;right:-6px;background:var(--hl);color:var(--hl-ink);font-size:10.5px;font-weight:800;padding:0 4px;border-radius:2px;line-height:15px}
+.rail hr{width:28px;border:0;border-top:1px solid var(--rule);margin:6px 0}
+.rs{position:relative;width:38px;height:34px;border-radius:6px;display:grid;place-items:center;font:700 11.5px 'Atkinson Hyperlegible Mono',monospace;color:var(--ink2)}
+.rs.on{background:var(--panel);color:var(--ink);box-shadow:0 0 0 1px var(--rule)}
+.rs .dot{position:absolute;top:4px;right:4px;width:7px;height:7px}
+
+/* focus main */
+.main{flex:1;display:flex;flex-direction:column;min-width:0;padding-block:10px}
+.tabs{display:flex;align-items:end;gap:2px;padding:0 12px;height:38px}
+.tab{display:flex;align-items:center;gap:8px;height:34px;padding:0 14px;border-radius:7px 7px 0 0;color:var(--ink2);font-size:13px}
+.tab.on{background:var(--panel);color:var(--ink);font-weight:800;box-shadow:0 -1px 0 var(--rule),1px 0 0 var(--rule),-1px 0 0 var(--rule)}
+.tab .x{color:var(--ink3);display:grid}
+.tab.add{padding:0 10px;color:var(--ink3)}
+.card{flex:1;display:flex;flex-direction:column;margin-left:12px;background:var(--panel);border:1px solid var(--rule);border-radius:0 8px 8px 8px;min-height:0;overflow:hidden;position:relative}
+.card.solo{border-radius:8px}
+.cbar{display:flex;align-items:center;gap:10px;height:46px;padding:0 10px 0 16px;border-bottom:1px solid var(--rule)}
+.cbar .path{font:12px 'Atkinson Hyperlegible Mono',monospace;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border:1px solid var(--rule);border-radius:6px;font-size:12.5px;white-space:nowrap}
+.chip .k{color:var(--ink3)}
+.chip.open{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}
+.cbar .acts{display:flex;gap:2px}
+.term{margin:0;white-space:pre;overflow:hidden;font-variant-ligatures:none;background:var(--t-bg);color:var(--t-fg)}
+.card .term{flex:1;padding:16px 20px;font:13px/1.65 'Atkinson Hyperlegible Mono',monospace}
+.term b{font-weight:700}
+.term .t-dim{color:var(--t-dim)} .term .t-add{color:var(--t-add);background:var(--t-add-bg)} .term .t-del{color:var(--t-del);background:var(--t-del-bg)}
+.term .t-acc{color:var(--t-acc)} .term .t-user{background:var(--t-user-bg)} .term .t-sel{color:var(--t-sel);font-weight:700} .term .t-warn{color:var(--t-warn)}
+.term .t-box{display:block;border-top:1px solid var(--t-rule);padding-top:6px;margin-top:4px}
+.term .cur{display:inline-block;width:.6em;height:1.15em;vertical-align:-.2em;background:var(--t-fg);opacity:.8}
+.term.dim{opacity:.55}
+.endbar{display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--rule);background:var(--hover)}
+.endbar .txt{display:flex;flex-direction:column;line-height:1.35}
+.endbar .txt b{font-size:14px}
+.endbar .txt span{color:var(--ink2);font-size:12.5px}
+
+/* inspector */
+.insp{width:296px;flex:none;display:flex;flex-direction:column;gap:18px;padding:16px 16px 16px 14px;overflow:hidden}
+.insp-h{display:flex;align-items:center;justify-content:space-between;font-weight:800;font-size:13px}
+.insp-h .k{font-weight:400}
+.blk{display:flex;flex-direction:column;gap:8px}
+.blk h5{margin:0;display:flex;justify-content:space-between;font-size:12px;font-weight:800;color:var(--ink2)}
+.blk h5 span{font-weight:400;color:var(--ink3);font-family:'Atkinson Hyperlegible Mono',monospace}
+.meter{height:8px;border-radius:4px;background:var(--rule);overflow:hidden;display:flex}
+.meter i{display:block;height:100%}
+.legend{display:flex;gap:12px;font-size:11.5px;color:var(--ink2)}
+.kv{display:grid;grid-template-columns:1fr auto;gap:4px 10px;font-size:13px;margin:0}
+.kv dt{color:var(--ink2)} .kv dd{margin:0;font-family:'Atkinson Hyperlegible Mono',monospace;font-variant-numeric:tabular-nums;text-align:right}
+.todo{display:flex;flex-direction:column;gap:6px;margin:0;padding:0;list-style:none;font-size:13px}
+.todo li{display:flex;gap:8px;align-items:flex-start;line-height:1.35}
+.todo .bx{flex:none;width:15px;height:15px;margin-top:1px;border-radius:3px;border:1.5px solid var(--ink3);display:grid;place-items:center}
+.todo .bx .ic{width:11px;height:11px;stroke-width:3}
+.todo li.ok{color:var(--ink3)} .todo li.ok .bx{background:var(--work);border-color:var(--work);color:var(--panel)}
+.todo li.now{font-weight:800} .todo li.now .bx{border-color:var(--hl-edge);background:var(--hl)}
+.files{display:flex;flex-direction:column;gap:3px;font:12.5px 'Atkinson Hyperlegible Mono',monospace}
+.files div{display:flex;gap:8px} .files div span:first-child{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.files .p{color:var(--work)} .files .m{color:var(--err)}
+.branch{display:flex;align-items:center;gap:8px;font:12.5px 'Atkinson Hyperlegible Mono',monospace;padding:8px 10px;border-radius:6px;background:var(--panel);border:1px solid var(--rule)}
+.branch small{margin-left:auto;color:var(--ink3);font-family:'Atkinson Hyperlegible Next',sans-serif}
+
+/* grid */
+.gmain{flex:1;display:flex;flex-direction:column;min-width:0;padding:10px 12px 12px;gap:10px}
+.gbar{display:flex;align-items:center;gap:12px;height:34px;padding:0 2px}
+.gbar h3{margin:0;font-size:15px}
+.gbar .muted{color:var(--ink2);font-size:13px}
+.lay{display:flex;gap:2px;padding:2px;border-radius:6px;background:color-mix(in srgb,var(--ink) 6%,transparent)}
+.lay span{padding:3px 10px;border-radius:4px;font-size:12.5px;color:var(--ink2)}
+.lay span.on{background:var(--panel);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--rule)}
+.grid{flex:1;display:grid;gap:10px;min-height:0}
+.grid.g4{grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr}
+.grid.g6{grid-template-columns:1fr 1fr 1fr;grid-template-rows:1fr 1fr}
+.cell{display:flex;flex-direction:column;min-height:0;min-width:0;background:var(--panel);border:1px solid var(--rule);border-radius:8px;overflow:hidden}
+.cell.a{border-color:var(--hl-edge)}
+.cell.active{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}
+.cell-h{display:flex;align-items:center;gap:8px;height:38px;padding:0 6px 0 12px;border-bottom:1px solid var(--rule);min-width:0}
+.cell-h .nm{display:flex;gap:6px;align-items:baseline;min-width:0;white-space:nowrap}
+.cell-h .nm b{font-weight:800}
+.cell-h .nm span{color:var(--ink3);font-size:12.5px;overflow:hidden;text-overflow:ellipsis}
+.cell-h .chip{height:24px;font-size:12px;padding:0 8px}
+.cell-h .ib{width:26px;height:26px}
+.cell .term{flex:1;padding:10px 12px;font:12px/1.55 'Atkinson Hyperlegible Mono',monospace;min-height:0}
+.g6 .cell .term{font-size:11.5px}
+.ask{display:flex;align-items:center;gap:8px;padding:8px 8px 8px 12px;border-top:1px solid var(--hl-edge);background:var(--hl-soft);font-size:12.5px;min-width:0}
+.ask .q{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ask code{font:12px 'Atkinson Hyperlegible Mono',monospace}
+
+/* overlays */
+.scrim{position:absolute;inset:0;background:var(--scrim);display:flex;justify-content:center;align-items:flex-start;padding-top:96px;z-index:5}
+.pal{width:640px;background:var(--panel);border:1px solid var(--rule);border-radius:10px;box-shadow:var(--shadow);overflow:hidden}
+.pal-in{display:flex;align-items:center;gap:10px;height:52px;padding:0 16px;border-bottom:1px solid var(--rule);font-size:15px}
+.pal-in .ph{color:var(--ink3);flex:1}
+.pal-in .typed{flex:1}
+.pal-in .cur{display:inline-block;width:1.5px;height:18px;background:var(--ink);vertical-align:-3px;margin-left:1px}
+.crumbs{display:flex;align-items:center;gap:4px;padding:10px 16px 0;font:12.5px 'Atkinson Hyperlegible Mono',monospace;color:var(--ink2);flex-wrap:wrap}
+.crumbs .ttl{font-family:'Atkinson Hyperlegible Next',sans-serif;font-weight:800;color:var(--ink);margin-right:6px}
+.crumbs span.seg2{padding:1px 5px;border-radius:4px}
+.crumbs span.last{background:var(--hover);color:var(--ink)}
+.pal-list{padding:6px;display:flex;flex-direction:column}
+.pal-g{padding:8px 10px 4px;font-size:11.5px;font-weight:800;color:var(--ink3)}
+.pal-i{display:flex;align-items:center;gap:10px;height:36px;padding:0 10px;border-radius:6px}
+.pal-i .ic{color:var(--ink3)}
+.pal-i .lb{white-space:nowrap}
+.pal-i .dt{color:var(--ink3);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
+.pal-i.on{background:var(--sel)}
+.pal-i.on .ic{color:var(--acc)}
+.pal-i .tag{font-size:11.5px;color:var(--ink3);border:1px solid var(--rule);border-radius:4px;padding:0 6px}
+.pal-f{display:flex;gap:16px;padding:9px 16px;border-top:1px solid var(--rule);font-size:12px;color:var(--ink2);background:var(--hover)}
+.pal-f span{display:inline-flex;align-items:center;gap:6px}
+.pop{position:absolute;z-index:6;width:400px;background:var(--panel);border:1px solid var(--rule);border-radius:10px;box-shadow:var(--shadow);padding:14px;display:flex;flex-direction:column;gap:10px}
+.pop h6{margin:0;font-size:12px;font-weight:800;color:var(--ink2)}
+.opts{display:flex;gap:4px;flex-wrap:wrap}
+.opt{display:flex;flex-direction:column;gap:1px;padding:7px 10px;border-radius:6px;border:1px solid var(--rule);font-size:13px;font-weight:700;min-width:70px}
+.opt small{font-weight:400;font-size:11.5px;color:var(--ink3)}
+.opt.on{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc);background:var(--sel)}
+.opt.cur{position:relative}
+.pop p{margin:0;font-size:12.5px;color:var(--ink2);line-height:1.4}
+.pop .row{display:flex;justify-content:flex-end;gap:6px}
+
+/* welcome */
+.welcome{flex:1;display:flex;justify-content:center;align-items:flex-start;padding-top:80px;overflow:hidden}
+.wbox{width:640px;display:flex;flex-direction:column;gap:22px}
+.wbox h2{margin:0;font-size:28px;letter-spacing:-.01em;line-height:1.2}
+.wbox h2 .mark{font-size:inherit;letter-spacing:-.01em;font-weight:800;padding:0 6px}
+.wbox > p{margin:0;font-size:15px;color:var(--ink2);max-width:58ch}
+.wact{display:flex;gap:10px;align-items:center}
+.wlist{background:var(--panel);border:1px solid var(--rule);border-radius:10px;overflow:hidden}
+.wlist-h{display:flex;justify-content:space-between;padding:10px 14px;font-size:12px;font-weight:800;color:var(--ink2);border-bottom:1px solid var(--rule)}
+.wlist-h span{font-weight:400;color:var(--ink3)}
+.wrow{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--rule)}
+.wrow:last-child{border-bottom:0}
+.wrow .ic{color:var(--ink3)}
+.wrow .nm{display:flex;flex-direction:column;line-height:1.3;flex:1;min-width:0}
+.wrow .nm b{font-size:14px}
+.wrow .nm span{font:12px 'Atkinson Hyperlegible Mono',monospace;color:var(--ink3)}
+.wrow time{font-size:12.5px;color:var(--ink3);white-space:nowrap}
+.keys{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.keys div{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink2)}
+.blank{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:var(--ink2);text-align:center}
+.blank b{font-size:17px;color:var(--ink)}
+</style>
+
+<div class="page">
+  <div class="head">
+    <div>
+      <h1>AgentHub · thème Établi</h1>
+      <p>Les écrans de l'app dans la direction C. Les fonctions futures sont signalées par <span class="mock">Mock</span> dans les notes sous chaque écran.</p>
+    </div>
+    <div class="seg" id="themeSeg" aria-label="App theme"><button data-v="light" aria-pressed="true">Light</button><button data-v="dark" aria-pressed="false">Dark</button></div>
+  </div>
+  <div class="picker" role="tablist" id="picker"></div>
+  <div class="bar"><h2 id="scrTitle"></h2><div class="r"><span class="count" id="scrCount"></span><div class="nav"><button id="prev" aria-label="Previous screen">←</button><button id="next" aria-label="Next screen">→</button></div></div></div>
+  <div class="stage" id="stage"></div>
+  <div class="notes" id="notes"></div>
+</div>
+
+<script>
+(function(){
+const P = {
+  search:'<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  square:'<rect x="4" y="4" width="16" height="16" rx="2"/>',
+  grid:'<rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>',
+  chev:'<path d="m6 9 6 6 6-6"/>', chevr:'<path d="m9 6 6 6-6 6"/>',
+  bell:'<path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
+  sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  moon:'<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
+  monitor:'<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
+  restart:'<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>',
+  x:'<path d="M6 6l12 12M18 6 6 18"/>',
+  branch:'<circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10M18 9c0 5-12 3-12 8"/>',
+  folder:'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  folderplus:'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 11v5M9.5 13.5h5"/>',
+  check:'<path d="m5 12 5 5 9-10"/>',
+  panel:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/>',
+  side:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/>',
+  max:'<path d="M15 4h5v5M9 20H4v-5M20 4l-6 6M4 20l6-6"/>',
+  hist:'<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>',
+  term:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M12 15h5"/>',
+  up:'<path d="M12 19V5M6 11l6-6 6 6"/>',
+  enter:'<path d="M20 5v7a3 3 0 0 1-3 3H5"/><path d="m9 11-4 4 4 4"/>'
+};
+const ic = (n, cls) => '<svg class="ic'+(cls?' '+cls:'')+'" viewBox="0 0 24 24" aria-hidden="true">'+P[n]+'</svg>';
+
+/* ---------- data ---------- */
+const S = {
+  s1:{name:'Scraper fix', proj:'CheckTaJob', st:'a', t:'41m', model:'Opus 5.5', eff:'High', ask:'perm'},
+  s2:{name:'Auth refactor', proj:'CheckTaJob', st:'w', t:'17m', model:'Sonnet 5.5', eff:'Medium'},
+  s3:{name:'Theme study', proj:'orchia-agenthub', st:'w', t:'1h', model:'Opus 5.5', eff:'Max'},
+  s4:{name:'Map pins', proj:'PitouFriendly', st:'d', t:'52m', model:'Opus 5.5', eff:'High'},
+  s5:{name:'Offline mode', proj:'PitouFriendly', st:'i', t:'9m', model:'Sonnet 5.5', eff:'High'},
+  s6:{name:'Onboarding copy', proj:'Lilaos', st:'a', t:'2h', model:'Haiku 5.5', eff:'Low', ask:'question'},
+  s7:{name:'Session 1', proj:'mtl-events', st:'p', t:'2d', model:'Opus 5.5', eff:'High'}
+};
+const PROJECTS = [
+  {name:'CheckTaJob', ids:['s1','s2']},
+  {name:'orchia-agenthub', ids:['s3']},
+  {name:'PitouFriendly', ids:['s4','s5']},
+  {name:'Lilaos', ids:['s6']},
+  {name:'mtl-events', ids:['s7'], collapsed:true}
+];
+const WORD = {a:'Needs you', w:'Working', d:'Done', i:'Idle', p:'Paused', x:'Ended'};
+
+const T = {
+s1:
+`<span class="t-user"><span class="t-dim">&gt;</span> the indeed scraper times out after 30s on big result pages, fix it </span>
+
+<span class="t-acc">●</span> <b>Read</b>(src/scrapers/indeed.ts)
+  <span class="t-dim">⎿  Read 214 lines</span>
+
+<span class="t-acc">●</span> <b>Search</b>(pattern: "timeout", path: "src/scrapers")
+  <span class="t-dim">⎿  Found 6 matches</span>
+
+●  The crawl shares one 30s timeout across every page. I'll give each page
+   its own timeout and retry once when a page is aborted.
+
+<span class="t-acc">●</span> <b>Update</b>(src/scrapers/indeed.ts)
+  <span class="t-dim">⎿  Updated src/scrapers/indeed.ts with 9 additions and 4 removals</span>
+     <span class="t-del">41 -   const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });</span>
+     <span class="t-add">41 +   for (const pageUrl of paginate(url)) {</span>
+     <span class="t-add">42 +     const res = await fetchWithRetry(pageUrl, { timeout: 15_000 });</span>
+
+<span class="t-acc">●</span> <b>Bash</b>(npm test -- scrapers/indeed)
+<span class="t-box"> <b>Bash command</b>
+
+   npm test -- scrapers/indeed
+   <span class="t-dim">Run the indeed scraper tests</span>
+
+ Do you want to proceed?
+ <span class="t-sel">❯ 1. Yes</span>
+   2. Yes, and don't ask again for <b>npm test</b> commands in this project
+   3. No, and tell Claude what to do differently <span class="t-dim">(esc)</span></span>`,
+s1g:
+`<span class="t-acc">●</span> <b>Update</b>(src/scrapers/indeed.ts)
+  <span class="t-dim">⎿  9 additions and 4 removals</span>
+     <span class="t-del">41 -   const res = await fetch(url, {…30_000});</span>
+     <span class="t-add">41 +   for (const pageUrl of paginate(url)) {</span>
+
+<span class="t-acc">●</span> <b>Bash</b>(npm test -- scrapers/indeed)
+<span class="t-box"> Do you want to proceed?
+ <span class="t-sel">❯ 1. Yes</span>
+   2. Yes, and don't ask again for npm test
+   3. No, and tell Claude what to do differently</span>`,
+s2g:
+`<span class="t-acc">●</span> <b>Read</b>(src/auth/session.ts)
+  <span class="t-dim">⎿  Read 132 lines</span>
+
+<span class="t-acc">●</span> <b>Update</b>(src/auth/session.ts)
+     <span class="t-del">18 -   res.cookie('sid', id, { httpOnly: true });</span>
+     <span class="t-add">18 +   res.cookie('sid', id, cookieOptions(env));</span>
+
+<span class="t-acc">●</span> <b>Update</b>(src/auth/cookies.ts)
+  <span class="t-dim">⎿  Created src/auth/cookies.ts (24 lines)</span>
+
+<span class="t-warn">✻</span> Moving cookie settings into one helper…
+  <span class="t-dim">(2m 14s · ↓ 3.1k tokens · esc to interrupt)</span>`,
+s3g:
+`<span class="t-acc">●</span> <b>Read</b>(web/src/styles.css)
+  <span class="t-dim">⎿  Read 1092 lines</span>
+
+●  I'll move every color into the token block and
+   add the highlighter yellow for "Needs you".
+
+<span class="t-acc">●</span> <b>Update</b>(web/src/styles.css)
+     <span class="t-add">12 +   --hl: #ffe24d;</span>
+     <span class="t-add">13 +   --hl-edge: #e2be00;</span>
+
+<span class="t-warn">✻</span> Writing the light tokens…
+  <span class="t-dim">(48s · ↓ 1.2k tokens · esc to interrupt)</span>`,
+s4g:
+`<span class="t-acc">●</span> <b>Bash</b>(npm test -- map)
+  <span class="t-dim">⎿  Tests  12 passed (12)</span>
+
+●  Done. Pins now cluster above 40 markers and
+   split again from zoom level 14.
+
+   Changed:
+   - src/map/PinLayer.tsx
+   - src/map/cluster.ts
+   - src/map/cluster.test.ts
+
+<span class="t-user"><span class="t-dim">&gt;</span> <span class="cur"></span>                                       </span>`,
+s5g:
+`●  The service worker now caches the last 50
+   places, and the map shows an "Offline" pill.
+
+<span class="t-user"><span class="t-dim">&gt;</span> <span class="cur"></span>                                       </span>
+  <span class="t-dim">? for shortcuts</span>`,
+s6g:
+`●  I found two versions of the onboarding text.
+
+ <b>☐ Language</b>
+
+ Keep the French onboarding copy, or translate
+ it to English?
+
+ <span class="t-sel">❯ 1. Keep French</span>
+   2. Translate to English
+   3. Both, with a language switch
+   4. Type something.`,
+s5end:
+`<span class="t-user"><span class="t-dim">&gt;</span> cache the last places for offline use </span>
+
+<span class="t-acc">●</span> <b>Write</b>(src/sw/cache.ts)
+  <span class="t-dim">⎿  Wrote 61 lines to src/sw/cache.ts</span>
+
+<span class="t-acc">●</span> <b>Update</b>(src/map/MapView.tsx)
+  <span class="t-dim">⎿  Updated with 14 additions and 2 removals</span>
+
+<span class="t-acc">●</span> <b>Bash</b>(npm test -- sw)
+  <span class="t-dim">⎿  Tests  8 passed (8)</span>
+
+●  The service worker now caches the last 50 places, and the
+   map shows an "Offline" pill when the network drops.
+
+<span class="t-user"><span class="t-dim">&gt;</span> /exit </span>
+  <span class="t-dim">⎿  Bye!</span>`
+};
+
+/* ---------- components ---------- */
+const dot = st => '<span class="dot '+st+'"></span>';
+const word = st => st==='a' ? '<span class="mark">NEEDS YOU</span>' : '<span class="sw '+st+'">'+WORD[st]+'</span>';
+
+function inbox(sel){
+  return '<div class="sec">Needs you <span class="n">3</span><span class="sp"></span></div><div class="inbox">'+
+  '<div class="msg'+(sel==='s1'?' on':'')+'"><div class="who"><span class="mark">PERMISSION</span><b>Scraper fix</b><span class="pj">· CheckTaJob</span><time>3m</time></div><p>Run <code>npm test -- scrapers/indeed</code></p><div class="acts"><span class="btn pri">Allow</span><span class="btn">Deny</span></div></div>'+
+  '<div class="msg'+(sel==='s6'?' on':'')+'"><div class="who"><span class="mark">QUESTION</span><b>Onboarding copy</b><span class="pj">· Lilaos</span><time>12m</time></div><p>Keep the French onboarding copy, or translate it to English?</p></div>'+
+  '<div class="msg'+(sel==='s4'?' on':'')+'"><div class="who"><span class="mark done">DONE</span><b>Map pins</b><span class="pj">· PitouFriendly</span><time>8m</time></div><p>Pins cluster above 40 markers. 3 files changed.</p></div>'+
+  '</div>';
+}
+function brand(view){
+  return '<div class="brand"><span class="glyph"><i></i><i></i><i></i><i></i></span>AgentHub<span class="sp"></span><div class="vs"><span class="ib'+(view==='focus'?' on':'')+'" title="Focus view">'+ic('square')+'</span><span class="ib'+(view==='grid'?' on':'')+'" title="Grid view">'+ic('grid')+'</span></div><span class="ib" title="Collapse sidebar">'+ic('side')+'</span></div>'+
+  '<div class="search">'+ic('search')+'<span>Search</span><kbd class="k">Ctrl K</kbd></div>';
+}
+function sideFoot(){
+  return '<div class="side-foot"><span class="ib" title="Desktop notifications">'+ic('bell')+'</span><span class="sp"></span><div class="tm"><span class="ib">'+ic('monitor')+'</span><span class="ib on">'+ic('sun')+'</span><span class="ib">'+ic('moon')+'</span></div></div>';
+}
+function sidebar(o){
+  o=o||{};
+  let h='<aside class="side">'+brand(o.view||'focus');
+  if(o.empty){
+    h+='<div class="sec">Projects<span class="sp"></span><span class="ib">'+ic('plus')+'</span></div><div class="empty-tree">No projects yet. Add a folder and start a Claude Code session in it.</div>';
+    return h+sideFoot()+'</aside>';
+  }
+  h+=inbox(o.sel);
+  h+='<div class="sec">Projects<span class="sp"></span><span class="ib" title="Add project">'+ic('plus')+'</span></div>';
+  PROJECTS.forEach(p=>{
+    const run=p.ids.filter(id=>(o.status&&o.status[id]||S[id].st)!=='x').length;
+    h+='<div class="proj">'+ic(p.collapsed?'chevr':'chev')+p.name+'<small>'+run+'</small></div>';
+    if(p.collapsed) return;
+    p.ids.forEach(id=>{
+      const s=S[id], st=(o.status&&o.status[id])||s.st, inGrid=o.grid&&o.grid.includes(id);
+      h+='<div class="sess'+(o.sel===id?' on':'')+'">'+dot(st)+s.name+(inGrid?ic('grid'):'')+'<span class="t">'+s.t+'</span></div>';
+    });
+  });
+  return h+sideFoot()+'</aside>';
+}
+function rail(o){
+  let h='<aside class="rail"><span class="glyph"><i></i><i></i><i></i><i></i></span><span class="ib" title="Expand sidebar">'+ic('side')+'</span><span class="ib" title="Search (Ctrl K)">'+ic('search')+'</span><span class="ib badge" title="Needs you">'+ic('bell')+'<b>3</b></span><hr>';
+  ['s1','s2','s3','s4','s5','s6','s7'].forEach((id,i)=>{
+    const s=S[id]; const ab=s.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    h+='<span class="rs'+(o.sel===id?' on':'')+'" title="'+s.proj+' / '+s.name+' (Alt '+(i+1)+')">'+ab+dot(s.st)+'</span>';
+  });
+  return h+'<span class="sp"></span><span class="ib">'+ic('sun')+'</span></aside>';
+}
+function modelChip(s,open){ return '<span class="chip'+(open?' open':'')+'" title="Model and effort">'+s.model+' <span class="k">·</span> '+s.eff+ic('chev')+'</span>'; }
+function focus(id,o){
+  o=o||{}; const s=S[id]; const proj=PROJECTS.find(p=>p.name===s.proj);
+  let h='<main class="main"><div class="tabs">';
+  proj.ids.forEach(pid=>{ const st=(o.status&&o.status[pid])||S[pid].st; h+='<span class="tab'+(pid===id?' on':'')+'">'+dot(st)+S[pid].name+(pid===id?'<span class="x">'+ic('x')+'</span>':'')+'</span>'; });
+  h+='<span class="tab add" title="New session (Alt N)">'+ic('plus')+'</span></div>';
+  h+='<div class="card"><div class="cbar"><b>'+s.proj+'</b><span class="path">~\\Documents\\projets\\'+s.proj+'</span><span class="sp"></span>'+
+     modelChip(s,o.modelOpen)+
+     '<div class="acts"><span class="ib" title="Restart, keeps the conversation">'+ic('restart')+'</span><span class="ib" title="Add to grid">'+ic('grid')+'</span><span class="ib'+(o.noInsp?'':' on')+'" title="Inspector (Alt I)">'+ic('panel')+'</span></div></div>';
+  h+='<pre class="term'+(o.ended?' dim':'')+'">'+T[o.term||id]+'</pre>';
+  if(o.ended) h+='<div class="endbar">'+dot('x')+'<div class="txt"><b>Claude exited 4 minutes ago</b><span>The conversation is saved. Restart picks it up where it stopped.</span></div><span class="sp"></span><span class="btn lg pri">'+ic('restart')+'Restart, keep the conversation</span><span class="btn lg">New conversation</span><span class="btn lg ghost">Close</span></div>';
+  return h+'</div></main>';
+}
+function inspector(kind){
+  const d = kind==='end' ? {
+    ctx:[7,30,24], used:'122k / 200k', cost:'$0.96', out:'21.4k', turns:4,
+    plan:[['ok','Cache the last 50 places'],['ok','Show an Offline pill on the map'],['ok','Test the service worker']], pc:'3 / 3',
+    files:[['src/sw/cache.ts','+61','−0'],['src/map/MapView.tsx','+14','−2'],['src/sw/cache.test.ts','+38','−0']], fsum:'+113 −2', br:'feat/offline-places', ahead:'1 ahead'
+  } : {
+    ctx:[9,38,15], used:'124k / 200k', cost:'$1.84', out:'38.2k', turns:7,
+    plan:[['ok','Find where the crawl timeout is set'],['ok','Give each page its own timeout'],['now','Run the indeed scraper tests'],['','Add a test for a 40-page result'],['','Update the scraper README']], pc:'2 / 5',
+    files:[['src/scrapers/indeed.ts','+18','−4'],['src/lib/fetchWithRetry.ts','+11','−0'],['src/scrapers/paginate.ts','+2','−5']], fsum:'+31 −9', br:'fix/indeed-timeout', ahead:'2 ahead'
+  };
+  return '<aside class="insp"><div class="insp-h">This session<span class="ib" title="Hide inspector (Alt I)">'+ic('x')+'</span></div>'+
+  '<div class="blk"><h5>Context <span>'+d.used+'</span></h5><div class="meter"><i style="width:'+d.ctx[0]+'%;background:var(--ink3)"></i><i style="width:'+d.ctx[1]+'%;background:var(--acc)"></i><i style="width:'+d.ctx[2]+'%;background:color-mix(in srgb,var(--acc) 45%,transparent)"></i></div><div class="legend"><span>system</span><span style="color:var(--acc)">files read</span><span>conversation</span></div></div>'+
+  '<dl class="kv"><dt>Cost so far</dt><dd>'+d.cost+'</dd><dt>Tokens written</dt><dd>'+d.out+'</dd><dt>Turns</dt><dd>'+d.turns+'</dd></dl>'+
+  '<div class="blk"><h5>Plan <span>'+d.pc+'</span></h5><ul class="todo">'+d.plan.map(p=>'<li class="'+p[0]+'"><span class="bx">'+(p[0]==='ok'?ic('check'):'')+'</span>'+p[1]+'</li>').join('')+'</ul></div>'+
+  '<div class="blk"><h5>Files changed <span>'+d.fsum+'</span></h5><div class="files">'+d.files.map(f=>'<div><span>'+f[0]+'</span><span class="p">'+f[1]+'</span><span class="m">'+f[2]+'</span></div>').join('')+'</div></div>'+
+  '<div class="blk"><h5>Branch</h5><div class="branch">'+ic('branch')+d.br+'<small>'+d.ahead+'</small></div></div></aside>';
+}
+function cell(id,active){
+  const s=S[id];
+  let h='<section class="cell'+(s.st==='a'?' a':'')+(active?' active':'')+'"><div class="cell-h">'+dot(s.st)+'<span class="nm"><b>'+s.name+'</b><span>'+s.proj+'</span></span>'+word(s.st)+'<span class="sp"></span>'+
+    '<span class="chip">'+s.model.replace(' 5.5','')+' · '+s.eff+'</span><span class="ib" title="Focus this session">'+ic('max')+'</span><span class="ib" title="Remove from grid">'+ic('x')+'</span></div>';
+  h+='<pre class="term">'+T[id+'g']+'</pre>';
+  if(s.ask==='perm') h+='<div class="ask"><span class="q">Run <code>npm test -- scrapers/indeed</code></span><span class="btn pri">Allow</span><span class="btn">Deny</span></div>';
+  if(s.ask==='question') h+='<div class="ask"><span class="q">Asks which language to keep</span><span class="btn">Answer in the terminal</span></div>';
+  return h+'</section>';
+}
+function gridMain(ids,cls,label){
+  return '<main class="gmain"><div class="gbar"><h3>Grid</h3><span class="muted">'+label+'</span><span class="sp"></span><span class="muted">Layout</span><div class="lay"><span'+(cls==='g4'?' class="on"':'')+'>2 × 2</span><span'+(cls==='g6'?' class="on"':'')+'>3 × 2</span></div></div>'+
+    '<div class="grid '+cls+'">'+ids.map((id,i)=>cell(id,i===0)).join('')+'</div></main>';
+}
+function palette(){
+  const it=(icn,lb,dt,tag,on)=>'<div class="pal-i'+(on?' on':'')+'">'+icn+'<span class="lb">'+lb+'</span><span class="dt">'+(dt||'')+'</span>'+(tag?'<kbd class="k">'+tag+'</kbd>':'')+'</div>';
+  return '<div class="scrim"><div class="pal"><div class="pal-in">'+ic('search')+'<span class="ph"><span class="cur"></span> Search sessions, projects, folders and actions</span></div><div class="pal-list">'+
+    '<div class="pal-g">Needs you</div>'+
+    it(dot('a'),'Scraper fix','CheckTaJob · wants to run npm test','Alt 1',true)+
+    it(dot('a'),'Onboarding copy','Lilaos · asks a question','Alt 6')+
+    it(dot('d'),'Map pins','PitouFriendly · done 8 min ago','Alt 4')+
+    '<div class="pal-g">Other sessions</div>'+
+    it(dot('w'),'Auth refactor','CheckTaJob · working','Alt 2')+
+    it(dot('w'),'Theme study','orchia-agenthub · working','Alt 3')+
+    '<div class="pal-g">Actions</div>'+
+    it(ic('plus'),'New session in CheckTaJob','','Alt N')+
+    it(ic('grid'),'Switch to grid view','','Alt G')+
+    it(ic('folderplus'),'Add a project…','Browse folders or paste a path','')+
+    it(ic('panel'),'Show or hide the inspector','','Alt I')+
+    '</div><div class="pal-f"><span><kbd class="k">↑</kbd><kbd class="k">↓</kbd> move</span><span><kbd class="k">Enter</kbd> open</span><span><kbd class="k">Esc</kbd> close</span><span class="sp"></span><span>Type a path to add a folder</span></div></div></div>';
+}
+function addProject(){
+  const row=(n,dt,tag,on)=>'<div class="pal-i'+(on?' on':'')+'">'+ic('folder')+'<span class="lb">'+n+'</span><span class="dt">'+(dt||'')+'</span>'+(tag||'')+'</div>';
+  const added='<span class="tag">Added</span>';
+  return '<div class="scrim"><div class="pal"><div class="crumbs"><span class="ttl">Add a project</span><span class="seg2">C:</span>›<span class="seg2">Users</span>›<span class="seg2">mp041</span>›<span class="seg2">Documents</span>›<span class="seg2 last">projets</span></div>'+
+  '<div class="pal-in">'+ic('search')+'<span class="ph"><span class="cur"></span> Filter folders, or paste a path</span></div><div class="pal-list">'+
+  '<div class="pal-g">Used with Claude Code</div>'+
+  row('Dorothy','git · main · last session 2 days ago','<span class="btn pri">Add project</span><span class="ib" title="Open folder">'+ic('chevr')+'</span>',true)+
+  row('portfolio-2026','git · main · last session 3 weeks ago','<span class="ib">'+ic('chevr')+'</span>')+
+  '<div class="pal-g">Other folders in projets</div>'+
+  row('CheckTaJob','git · main',added)+
+  row('Lilaos','git · develop',added)+
+  row('mtl-events','git · main',added)+
+  row('scratch','no git','<span class="ib">'+ic('chevr')+'</span>')+
+  '</div><div class="pal-f"><span><kbd class="k">Enter</kbd> add project</span><span><kbd class="k">→</kbd> open folder</span><span><kbd class="k">Backspace</kbd> parent folder</span><span><kbd class="k">Esc</kbd> back</span></div></div></div>';
+}
+function modelPop(){
+  const o=(n,sub,on)=>'<span class="opt'+(on?' on':'')+'">'+n+'<small>'+sub+'</small></span>';
+  return '<div class="pop" style="top:92px;right:402px"><h6>Model</h6><div class="opts">'+
+    o('Fable 5.1','most capable')+o('Opus 5.5','current',true)+o('Sonnet 5.5','faster')+o('Haiku 5.5','fastest')+'</div>'+
+    '<h6>Effort</h6><div class="opts">'+o('Low','')+o('Medium','')+o('High','current',true)+o('XHigh','')+o('Max','')+'</div>'+
+    '<p>Restarts this session with the new settings and keeps the conversation. Your global Claude settings stay the same.</p>'+
+    '<p style="color:var(--hl-ink);background:var(--hl-soft);padding:6px 8px;border-radius:5px;border:1px solid var(--hl-edge)">Claude is waiting for your answer. Apply after you reply, or the pending request is cancelled.</p>'+
+    '<div class="row"><span class="btn ghost">Cancel</span><span class="btn pri">Apply</span></div></div>';
+}
+function welcome(){
+  const r=(n,p,t)=>'<div class="wrow">'+ic('folder')+'<span class="nm"><b>'+n+'</b><span>'+p+'</span></span><time>'+t+'</time><span class="btn">Add</span></div>';
+  return '<main class="welcome"><div class="wbox"><h2>Run all your Claude Code sessions <span class="mark">in one place</span></h2>'+
+  '<p>Add a project folder, then start sessions in it. AgentHub shows which sessions are working, which ones need you, and which ones are done.</p>'+
+  '<div class="wact"><span class="btn lg pri">'+ic('folderplus')+'Add a project folder</span><span class="btn lg ghost">or press <kbd class="k">Ctrl K</kbd></span></div>'+
+  '<div class="wlist"><div class="wlist-h">Folders you used with Claude Code <span>found in ~/.claude/projects</span></div>'+
+  r('CheckTaJob','C:\\Users\\mp041\\Documents\\projets\\CheckTaJob','today')+
+  r('PitouFriendly','C:\\Users\\mp041\\Documents\\projets\\PitouFriendly','yesterday')+
+  r('Lilaos','C:\\Users\\mp041\\Documents\\projets\\Lilaos','3 days ago')+
+  r('Dorothy','C:\\Users\\mp041\\Documents\\projets\\Dorothy','last week')+'</div>'+
+  '<div class="keys"><div><kbd class="k">Alt N</kbd> new session</div><div><kbd class="k">Alt G</kbd> focus or grid</div><div><kbd class="k">Alt 1…9</kbd> jump to a session</div></div>'+
+  '</div></main>';
+}
+
+/* ---------- screens ---------- */
+const app = inner => '<div class="app" data-mt="'+theme+'">'+inner+'</div>';
+const SCREENS = [
+  {id:'focus', name:'Focus', title:'Focus · a session waits for permission',
+   html:()=>app(sidebar({sel:'s1'})+focus('s1')+inspector()),
+   notes:[
+    ['Inbox à gauche','La demande réelle s\'affiche en clair, avec Allow / Deny directement sur la carte. Les questions ouvrent la session, car il faut lire le contexte.', true],
+    ['Onglets par projet','Les sessions du projet courant sont en onglets au-dessus du terminal. Le + crée une session dans ce projet (Alt N).'],
+    ['Inspecteur repliable','Contexte, coût, plan de l\'agent, fichiers modifiés, branche. Alt I ou le bouton à droite de la barre le masque.', true],
+    ['Un seul jaune','Le jaune surligneur ne désigne que ce qui attend une action de ta part : sidebar, onglet, inbox.']
+   ]},
+  {id:'grid4', name:'Grid · 4', title:'Grid · 4 sessions, 2 × 2',
+   html:()=>app(sidebar({view:'grid', grid:['s1','s2','s3','s4']})+gridMain(['s1','s2','s3','s4'],'g4','4 of 7 sessions · click a session in the sidebar to add it')),
+   notes:[
+    ['État en mots','Chaque cellule affiche son état en toutes lettres à côté du nom, pas seulement une pastille.'],
+    ['Répondre sans quitter la grille','Une cellule bloquée a un bandeau jaune en bas avec Allow / Deny. Pas besoin de passer en focus.', true],
+    ['Cellule active','Le contour bleu montre où va le clavier. Double-clic sur l\'en-tête ou l\'icône agrandir pour passer en focus.'],
+    ['Repère dans la sidebar','L\'icône grille à côté d\'une session indique qu\'elle est déjà affichée.']
+   ]},
+  {id:'grid6', name:'Grid · 6', title:'Grid · 6 sessions, 3 × 2, sidebar collapsed',
+   html:()=>app(rail({sel:'s1'})+gridMain(['s1','s2','s3','s4','s5','s6'],'g6','6 of 7 sessions · Alt 1…6 to move between cells')),
+   notes:[
+    ['Sidebar en rail','À 6 terminaux, la sidebar se replie en rail pour donner la place aux cellules. Les initiales et la pastille suffisent à se repérer, le nom complet est en infobulle.'],
+    ['Compteur Needs you','La cloche du rail garde le compteur jaune : on sait qu\'il y a 3 demandes même sidebar fermée.'],
+    ['Choix de disposition','2 × 2 ou 3 × 2 en haut à droite, au lieu d\'une disposition calculée automatiquement.', true],
+    ['Question en grille','Pour une question, le bandeau renvoie au terminal de la cellule : la réponse se tape dans le terminal.']
+   ]},
+  {id:'palette', name:'Search', title:'Search · Ctrl K',
+   html:()=>app(sidebar({sel:'s1'})+focus('s1')+inspector()+palette()),
+   notes:[
+    ['Ce qui t\'attend en premier','Sans rien taper, la palette liste d\'abord les sessions qui t\'attendent, puis les autres sessions, puis les actions.', true],
+    ['Raccourcis visibles','Chaque ligne montre son raccourci : on apprend les raccourcis en se servant de la palette.'],
+    ['Ajouter un dossier','Coller un chemin dans le champ propose directement de l\'ajouter comme projet, comme aujourd\'hui.']
+   ]},
+  {id:'add', name:'Add project', title:'Add a project · folder browser',
+   html:()=>app(sidebar({sel:'s1'})+focus('s1')+inspector()+addProject()),
+   notes:[
+    ['Fil d\'Ariane cliquable','Le chemin courant est en haut. Chaque segment est cliquable pour remonter.'],
+    ['Dossiers utilisés avec Claude','Les dossiers où tu as déjà lancé Claude Code passent en premier, avec la date de la dernière session.'],
+    ['Deux gestes distincts','« Add project » ajoute le dossier, la flèche entre dedans. Aujourd\'hui ces deux gestes se confondent un peu.'],
+    ['Déjà ajouté','Les dossiers déjà présents sont marqués « Added » plutôt que cachés : on comprend pourquoi ils ne sont pas proposés.']
+   ]},
+  {id:'model', name:'Model', title:'Model and effort',
+   html:()=>app(sidebar({sel:'s1'})+focus('s1',{modelOpen:true})+inspector()+modelPop()),
+   notes:[
+    ['Une seule puce','Modèle et effort sont regroupés dans une seule puce. Un clic ouvre les deux choix ensemble.'],
+    ['Option courante marquée','Chaque option a un sous-titre court, et l\'option en cours porte la mention « current ».'],
+    ['Conséquence expliquée','Le texte dit ce que fait Apply : la session redémarre et garde la conversation. Si Claude attend une réponse, l\'avertissement jaune le signale avant de l\'interrompre.']
+   ]},
+  {id:'ended', name:'Ended', title:'Session ended',
+   html:()=>app(sidebar({sel:'s5', status:{s5:'x'}})+focus('s5',{term:'s5end', ended:true, status:{s5:'x'}})+inspector('end')),
+   notes:[
+    ['Terminal grisé','La dernière sortie reste lisible mais estompée : on voit que plus rien ne tourne.'],
+    ['Une barre, trois choix','En bas : redémarrer en gardant la conversation (action principale), repartir de zéro, ou fermer.'],
+    ['Phrase explicite','« The conversation is saved » répond à la question qu\'on se pose à ce moment-là.'],
+    ['Inspecteur conservé','Le bilan reste visible après la fin : plan terminé, fichiers, branche.', true]
+   ]},
+  {id:'welcome', name:'First launch', title:'First launch · no projects yet',
+   html:()=>app(sidebar({empty:true})+welcome()),
+   notes:[
+    ['Une phrase, un bouton','Ce que fait l\'outil, puis une seule action principale.'],
+    ['Projets proposés','Les dossiers trouvés dans ~/.claude/projects sont proposés directement avec un bouton Add. La fonction existe déjà dans la palette, elle passe ici au premier plan.'],
+    ['Trois raccourcis seulement','Les trois raccourcis qui changent le quotidien, pas la liste complète.']
+   ]}
+];
+
+/* ---------- page wiring ---------- */
+let theme='light', cur=0;
+const stage=document.getElementById('stage'), picker=document.getElementById('picker');
+picker.innerHTML=SCREENS.map((s,i)=>'<button role="tab" aria-selected="false" data-i="'+i+'"><span>'+(i+1)+'</span>'+s.name+'</button>').join('');
+function render(){
+  const s=SCREENS[cur];
+  stage.innerHTML=s.html();
+  document.getElementById('scrTitle').textContent=s.title;
+  document.getElementById('scrCount').textContent=(cur+1)+' / '+SCREENS.length;
+  document.getElementById('notes').innerHTML=s.notes.map(n=>'<div><b>'+n[0]+(n[2]?' <span class="mock">Mock</span>':'')+'</b><p>'+n[1]+'</p></div>').join('');
+  picker.querySelectorAll('button').forEach((b,i)=>b.setAttribute('aria-selected',String(i===cur)));
+  fit();
+}
+function go(i){ cur=(i+SCREENS.length)%SCREENS.length; render(); }
+picker.addEventListener('click',e=>{const b=e.target.closest('button'); if(b) go(+b.dataset.i);});
+document.getElementById('prev').onclick=()=>go(cur-1);
+document.getElementById('next').onclick=()=>go(cur+1);
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowRight') go(cur+1); else if(e.key==='ArrowLeft') go(cur-1);
+  else if(/^[1-8]$/.test(e.key)) go(+e.key-1);
+});
+document.querySelectorAll('#themeSeg button').forEach(b=>b.onclick=()=>{
+  theme=b.dataset.v;
+  document.querySelectorAll('#themeSeg button').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));
+  const a=stage.querySelector('.app'); if(a) a.dataset.mt=theme;
+});
+const ex=location.hash.slice(1).split('-');
+if(ex[0]){ const i=SCREENS.findIndex(s=>s.id===ex[0]); if(i>=0){ theme=ex[1]||'light';
+  document.body.style.cssText='padding:0;margin:0;background:#888';
+  document.body.innerHTML='<div style="width:1360px;height:840px">'+SCREENS[i].html()+'</div>';
+  return; } }
+function fit(){
+  const a=stage.firstElementChild; if(!a) return;
+  const k=Math.min(1,stage.clientWidth/1360);
+  a.style.transform='scale('+k+')'; stage.style.height=(840*k)+'px';
+}
+window.addEventListener('resize',fit);
+if(document.fonts&&document.fonts.ready) document.fonts.ready.then(fit);
+render();
+})();
+</script>
